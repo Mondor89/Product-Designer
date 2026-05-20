@@ -2522,16 +2522,16 @@ function DesignerApp() {
               flexShrink: 0,
             }}>
 
-            {/* ── Sfondo colorato — colore prodotto selezionato ── */}
+            {/* ── Sfondo bianco base ── */}
             <div style={{
               position:'absolute', top:0, left:0, width:400, height:svgH,
-              background: productColor || '#ffffff',
+              background:'#ffffff',
               boxShadow:'0 2px 16px rgba(0,0,0,0.10)',
               borderRadius:4,
               zIndex:1, pointerEvents:'none',
             }} />
 
-            {/* ── Mockup PNG sopra — multiply: bianco diventa trasparente, ombre visibili ── */}
+            {/* ── Mockup PNG — base visibile della t-shirt ── */}
             {currentProduct?.mockups?.[currentSideName] ? (
               <img
                 src={currentProduct.mockups[currentSideName]}
@@ -2541,7 +2541,6 @@ function DesignerApp() {
                   width:400, height:svgH,
                   objectFit:'contain',
                   zIndex:2, pointerEvents:'none',
-                  mixBlendMode:'multiply',
                 }}
               />
             ) : (
@@ -2549,12 +2548,23 @@ function DesignerApp() {
                 dangerouslySetInnerHTML={{ __html: svgContent }} />
             )}
 
+            {/* ── Overlay colore con multiply — colora solo le zone scure (t-shirt), non il bianco ── */}
+            {currentProduct?.mockups?.[currentSideName] && productColor !== '#ffffff' && (
+              <div style={{
+                position:'absolute', top:0, left:0, width:400, height:svgH,
+                background: productColor,
+                zIndex:3, pointerEvents:'none',
+                mixBlendMode:'multiply',
+                borderRadius:4,
+              }} />
+            )}
+
             {/* Zona stampa tratteggiata */}
             {/* Zona tratteggiata — id per toggle DOM diretto senza re-render */}
             <div id="print-zone-outline" style={{ position:'absolute', top:zone.top, left:zone.left,
               width:zone.width, height:zone.height,
               border:'1.5px dashed rgba(63,199,186,0.55)',
-              borderRadius:4, zIndex:4, pointerEvents:'none',
+              borderRadius:4, zIndex:5, pointerEvents:'none',
               background:'rgba(63,199,186,0.03)',
               transition:'opacity 0.2s' }}>
               <div style={{ position:'absolute', bottom:-16, left:0, fontSize:9, whiteSpace:'nowrap',
@@ -2567,7 +2577,7 @@ function DesignerApp() {
 
             {/* Fabric canvas */}
             <canvas id="main-canvas" style={{
-              position:'absolute', top:0, left:0, zIndex:3, width:400, height:svgH, background:'transparent',
+              position:'absolute', top:0, left:0, zIndex:4, width:400, height:svgH, background:'transparent',
             }} />
 
             {/* Preview mask — gestita fuori dallo stage per evitare problemi di scaling */}
