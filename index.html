@@ -1753,7 +1753,52 @@ function DesignerApp() {
   const [sideIndex, setSideIndex] = useState(0);
   const [productColor, setProductColor] = useState('#ffffff');
 
-  // Colore prodotto gestito da ProductColorLayer (canvas 2D separato)
+  // ── Colore + mockup overlay — tecnica identica a Lumise ──
+  // productColor = fabric.Rect colorato sotto tutto
+  // mockup = setOverlayImage sopra tutto (no CORS, dentro Fabric)
+  useEffect(() => {
+    const canvas = window.DesignerCanvas;
+    if (!canvas) return;
+
+    // 1. Rect colore — sotto tutti gli oggetti
+    let rect = canvas.getObjects().find(o => o._isProductColor);
+    if (!rect) {
+      rect = new fabric.Rect({
+        width: canvas.width, height: canvas.height,
+        left: 0, top: 0,
+        originX: 'left', originY: 'top',
+        fill: productColor || '#ffffff',
+        selectable: false, evented: false,
+        _isProductColor: true,
+      });
+      canvas.add(rect);
+    } else {
+      rect.set('fill', productColor || '#ffffff');
+    }
+    canvas.sendToBack(rect);
+
+    // 2. Mockup come overlay Fabric — sopra tutto compreso rect
+    const _cp = PRODUCTS.find(p => p.id === product) || PRODUCTS[0];
+    const _side = _cp?.sides?.[sideIndex] || 'Fronte';
+    const mockupUrl = _cp?.mockups?.[_side];
+
+    if (mockupUrl) {
+      fabric.Image.fromURL(mockupUrl, (img) => {
+        if (!img) { canvas.renderAll(); return; }
+        img.scaleToWidth(canvas.width);
+        img.scaleToHeight(canvas.height);
+        // Overlay con multiply — bianco diventa trasparente, ombre rimangono
+        canvas.setOverlayImage(img, canvas.renderAll.bind(canvas), {
+          originX: 'left', originY: 'top',
+          globalCompositeOperation: 'multiply',
+        });
+      }, { crossOrigin: '' });
+    } else {
+      canvas.setOverlayImage(null, canvas.renderAll.bind(canvas));
+    }
+
+    canvas.renderAll();
+  }, [productColor, product, sideIndex, canvasReady]);
 
   const [canUndo, setCanUndo] = useState(false);
   const [canRedo, setCanRedo] = useState(false);
@@ -2522,7 +2567,7 @@ function DesignerApp() {
               flexShrink: 0,
             }}>
 
-            {/* ── Sfondo bianco base ── */}
+            {/* Sfondo bianco — colore e mockup gestiti dentro Fabric (tecnica Lumise) */}
             <div style={{
               position:'absolute', top:0, left:0, width:400, height:svgH,
               background:'#ffffff',
@@ -2530,33 +2575,10 @@ function DesignerApp() {
               borderRadius:4,
               zIndex:1, pointerEvents:'none',
             }} />
-
-            {/* ── Mockup PNG — base visibile della t-shirt ── */}
-            {currentProduct?.mockups?.[currentSideName] ? (
-              <img
-                src={currentProduct.mockups[currentSideName]}
-                alt={currentSideName}
-                style={{
-                  position:'absolute', top:0, left:0,
-                  width:400, height:svgH,
-                  objectFit:'contain',
-                  zIndex:2, pointerEvents:'none',
-                }}
-              />
-            ) : (
+            {/* Fallback SVG se no mockup */}
+            {!currentProduct?.mockups?.[currentSideName] && (
               <div style={{ position:'absolute', top:0, left:0, width:400, height:svgH, zIndex:2, pointerEvents:'none' }}
                 dangerouslySetInnerHTML={{ __html: svgContent }} />
-            )}
-
-            {/* ── Overlay colore con multiply — colora solo le zone scure (t-shirt), non il bianco ── */}
-            {currentProduct?.mockups?.[currentSideName] && productColor !== '#ffffff' && (
-              <div style={{
-                position:'absolute', top:0, left:0, width:400, height:svgH,
-                background: productColor,
-                zIndex:3, pointerEvents:'none',
-                mixBlendMode:'multiply',
-                borderRadius:4,
-              }} />
             )}
 
             {/* Zona stampa tratteggiata */}
@@ -2564,7 +2586,7 @@ function DesignerApp() {
             <div id="print-zone-outline" style={{ position:'absolute', top:zone.top, left:zone.left,
               width:zone.width, height:zone.height,
               border:'1.5px dashed rgba(63,199,186,0.55)',
-              borderRadius:4, zIndex:5, pointerEvents:'none',
+              borderRadius:4, zIndex:3, pointerEvents:'none',
               background:'rgba(63,199,186,0.03)',
               transition:'opacity 0.2s' }}>
               <div style={{ position:'absolute', bottom:-16, left:0, fontSize:9, whiteSpace:'nowrap',
@@ -2577,7 +2599,7 @@ function DesignerApp() {
 
             {/* Fabric canvas */}
             <canvas id="main-canvas" style={{
-              position:'absolute', top:0, left:0, zIndex:4, width:400, height:svgH, background:'transparent',
+              position:'absolute', top:0, left:0, zIndex:2, width:400, height:svgH,
             }} />
 
             {/* Preview mask — gestita fuori dallo stage per evitare problemi di scaling */}
