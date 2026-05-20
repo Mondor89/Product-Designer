@@ -2605,15 +2605,20 @@ function DesignerApp() {
             <div style={{ position:'absolute', bottom:16, left:'50%', transform:'translateX(-50%)',
               display:'flex', gap:4, background:'rgba(255,255,255,0.96)', borderRadius:24,
               padding:'5px 8px', boxShadow:'0 2px 12px rgba(0,0,0,0.1)', zIndex:5 }}>
-              {currentProduct?.sides.map((side, i) => (
-                <button key={i} onClick={() => switchSide(product, i)}
-                  style={{ padding:'5px 14px', borderRadius:16, border:'none', cursor:'pointer',
-                    fontSize:12, fontWeight:500,
-                    background: sideIndex===i ? '#3fc7ba' : 'transparent',
-                    color: sideIndex===i ? '#fff' : '#666', transition:'all 0.18s' }}>
-                  {side}
-                </button>
-              ))}
+              {currentProduct?.sides.map((side, i) => {
+                // Mostra tab solo se mockup esiste (non null) o se è Fronte/Retro senza mockup definiti
+                const hasMockup = !currentProduct.mockups || currentProduct.mockups[side] !== null;
+                if (!hasMockup) return null;
+                return (
+                  <button key={i} onClick={() => switchSide(product, i)}
+                    style={{ padding:'5px 14px', borderRadius:16, border:'none', cursor:'pointer',
+                      fontSize:12, fontWeight:500,
+                      background: sideIndex===i ? '#3fc7ba' : 'transparent',
+                      color: sideIndex===i ? '#fff' : '#666', transition:'all 0.18s' }}>
+                    {side}
+                  </button>
+                );
+              })}
             </div>
           )}
 
@@ -2722,16 +2727,21 @@ function DesignerApp() {
           {/* Barra lato + preview — una riga pulita */}
           <div style={{ background:'#1e2030', display:'flex', alignItems:'center',
             justifyContent:'center', gap:4, padding:'5px 8px', height:44, overflowX:'auto' }}>
-            {currentProduct?.sides.map((side, i) => (
-              <button key={i} onClick={() => switchSide(product, i)}
-                style={{ padding:'4px 11px', borderRadius:16, border:'none', cursor:'pointer',
-                  fontSize:11, fontWeight:500, whiteSpace:'nowrap',
-                  background: sideIndex===i ? '#3fc7ba' : 'rgba(255,255,255,0.08)',
-                  color: sideIndex===i ? '#fff' : '#8892b0',
-                  fontFamily:'inherit', transition:'all 0.18s', flexShrink:0 }}>
-                {side}
-              </button>
-            ))}
+            {currentProduct?.sides.map((side, i) => {
+                // Mostra tab solo se mockup esiste (non null)
+                const hasMockup = !currentProduct.mockups || currentProduct.mockups[side] !== null;
+                if (!hasMockup) return null;
+                return (
+                  <button key={i} onClick={() => switchSide(product, i)}
+                    style={{ padding:'4px 11px', borderRadius:16, border:'none', cursor:'pointer',
+                      fontSize:11, fontWeight:500, whiteSpace:'nowrap',
+                      background: sideIndex===i ? '#3fc7ba' : 'rgba(255,255,255,0.08)',
+                      color: sideIndex===i ? '#fff' : '#8892b0',
+                      fontFamily:'inherit', transition:'all 0.18s', flexShrink:0 }}>
+                    {side}
+                  </button>
+                );
+              })}
             <div style={{ width:1, height:20, background:'rgba(255,255,255,0.1)', flexShrink:0 }} />
             <button id="preview-btn-mob"
               onClick={() => {
