@@ -1745,60 +1745,57 @@ function MobileToolDrawer({ activeTab, onClose, onAddElement, products, currentP
 }
 
 // ─── Clean combined App:
+
+// ── ProductColorLayer — colora la forma del prodotto via canvas 2D ──
+// Tecnica: disegna colore pieno, poi usa il mockup come maschera destination-in
+// Risultato: il colore appare SOLO sulla forma della t-shirt
+function ProductColorLayer({ mockupUrl, color, width, height }) {
+  const canvasRef = React.useRef();
+
+  React.useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas || !mockupUrl) return;
+    const ctx = canvas.getContext('2d');
+    ctx.clearRect(0, 0, width, height);
+
+    const img = new Image();
+    img.crossOrigin = 'anonymous';
+    img.onload = () => {
+      // 1. Disegna colore pieno
+      ctx.fillStyle = color || '#ffffff';
+      ctx.fillRect(0, 0, width, height);
+      // 2. Usa mockup come maschera — mantiene solo i pixel della t-shirt
+      ctx.globalCompositeOperation = 'destination-in';
+      ctx.drawImage(img, 0, 0, width, height);
+      ctx.globalCompositeOperation = 'source-over';
+    };
+    img.onerror = () => {
+      // CORS fallback — prova senza crossOrigin
+      const img2 = new Image();
+      img2.onload = () => {
+        ctx.fillStyle = color || '#ffffff';
+        ctx.fillRect(0, 0, width, height);
+        ctx.globalCompositeOperation = 'destination-in';
+        ctx.drawImage(img2, 0, 0, width, height);
+        ctx.globalCompositeOperation = 'source-over';
+      };
+      img2.src = mockupUrl;
+    };
+    img.src = mockupUrl;
+  }, [mockupUrl, color, width, height]);
+
+  return (
+    <canvas ref={canvasRef} width={width} height={height}
+      style={{ position:'absolute', top:0, left:0, zIndex:2, pointerEvents:'none' }} />
+  );
+}
+
 function DesignerApp() {
   const [product, setProduct] = useState('tshirt');
   const [sideIndex, setSideIndex] = useState(0);
   const [productColor, setProductColor] = useState('#ffffff');
 
-  // Calcolo anticipato per l'useEffect (non può usare const dichiarate dopo)
-  const _currentProduct = PRODUCTS.find((p) => p.id === product) || PRODUCTS[0];
-  const _currentSideName = _currentProduct?.sides?.[sideIndex] || 'Fronte';
-
-  // ── Mockup + colore dentro Fabric — tecnica Lumise corretta ──
-  // Carica il mockup PNG come fabric.Image con multiply dentro il canvas
-  // così il colore appare SOLO sulla forma della t-shirt
-  useEffect(() => {
-    const canvas = window.DesignerCanvas;
-    if (!canvas) return;
-
-    // Rimuovi vecchio mockup e rect colore
-    canvas.getObjects()
-      .filter(o => o._isProductColor || o._isMockup)
-      .forEach(o => canvas.remove(o));
-
-    const mockupUrl = _currentProduct?.mockups?.[_currentSideName];
-    if (!mockupUrl) { canvas.renderAll(); return; }
-
-    // 1. Rect colore sotto
-    const rect = new fabric.Rect({
-      width: canvas.width, height: canvas.height,
-      left: 0, top: 0,
-      fill: productColor,
-      selectable: false, evented: false,
-      _isProductColor: true,
-    });
-    canvas.add(rect);
-    canvas.sendToBack(rect);
-
-    // 2. Mockup PNG come fabric.Image con multiply sopra
-    fabric.Image.fromURL(mockupUrl, (img) => {
-      if (!img) return;
-      img.set({
-        left: 0, top: 0,
-        scaleX: canvas.width / img.width,
-        scaleY: canvas.height / img.height,
-        selectable: false, evented: false,
-        globalCompositeOperation: 'multiply',
-        _isMockup: true,
-      });
-      canvas.add(img);
-      // Mockup sopra rect colore, sotto gli oggetti utente
-      canvas.sendToBack(img);
-      canvas.sendToBack(rect);
-      canvas.renderAll();
-    }, { crossOrigin: 'anonymous' });
-
-  }, [productColor, product, sideIndex, canvasReady]);
+  // Colore prodotto gestito da ProductColorLayer (canvas 2D separato)
 
   const [canUndo, setCanUndo] = useState(false);
   const [canRedo, setCanRedo] = useState(false);
@@ -2567,7 +2564,7 @@ function DesignerApp() {
               flexShrink: 0,
             }}>
 
-            {/* Sfondo bianco contenitore canvas — colore e mockup gestiti dentro Fabric */}
+            {/* ── Layer 1: sfondo bianco ── */}
             <div style={{
               position:'absolute', top:0, left:0, width:400, height:svgH,
               background:'#ffffff',
@@ -2575,6 +2572,32 @@ function DesignerApp() {
               borderRadius:4,
               zIndex:1, pointerEvents:'none',
             }} />
+
+            {/* ── Layer 2: colore prodotto via canvas 2D + mockup come maschera ── */}
+            <ProductColorLayer
+              mockupUrl={currentProduct?.mockups?.[currentSideName]}
+              color={productColor}
+              width={400}
+              height={svgH}
+            />
+
+            {/* ── Layer 3: mockup PNG sopra per ombre/texture ── */}
+            {currentProduct?.mockups?.[currentSideName] ? (
+              <img
+                src={currentProduct.mockups[currentSideName]}
+                alt={currentSideName}
+                style={{
+                  position:'absolute', top:0, left:0,
+                  width:400, height:svgH,
+                  objectFit:'contain',
+                  zIndex:3, pointerEvents:'none',
+                  mixBlendMode:'multiply',
+                }}
+              />
+            ) : (
+              <div style={{ position:'absolute', top:0, left:0, width:400, height:svgH, zIndex:3, pointerEvents:'none' }}
+                dangerouslySetInnerHTML={{ __html: svgContent }} />
+            )}
 
             {/* Zona stampa tratteggiata */}
             {/* Zona tratteggiata — id per toggle DOM diretto senza re-render */}
@@ -2594,7 +2617,7 @@ function DesignerApp() {
 
             {/* Fabric canvas */}
             <canvas id="main-canvas" style={{
-              position:'absolute', top:0, left:0, zIndex:2, width:400, height:svgH,
+              position:'absolute', top:0, left:0, zIndex:4, width:400, height:svgH,
             }} />
 
             {/* Preview mask — gestita fuori dallo stage per evitare problemi di scaling */}
