@@ -1753,52 +1753,7 @@ function DesignerApp() {
   const [sideIndex, setSideIndex] = useState(0);
   const [productColor, setProductColor] = useState('#ffffff');
 
-  // ── Colore + mockup overlay — tecnica identica a Lumise ──
-  // productColor = fabric.Rect colorato sotto tutto
-  // mockup = setOverlayImage sopra tutto (no CORS, dentro Fabric)
-  useEffect(() => {
-    const canvas = window.DesignerCanvas;
-    if (!canvas) return;
-
-    // 1. Rect colore — sotto tutti gli oggetti
-    let rect = canvas.getObjects().find(o => o._isProductColor);
-    if (!rect) {
-      rect = new fabric.Rect({
-        width: canvas.width, height: canvas.height,
-        left: 0, top: 0,
-        originX: 'left', originY: 'top',
-        fill: productColor || '#ffffff',
-        selectable: false, evented: false,
-        _isProductColor: true,
-      });
-      canvas.add(rect);
-    } else {
-      rect.set('fill', productColor || '#ffffff');
-    }
-    canvas.sendToBack(rect);
-
-    // 2. Mockup come overlay Fabric — sopra tutto compreso rect
-    const _cp = PRODUCTS.find(p => p.id === product) || PRODUCTS[0];
-    const _side = _cp?.sides?.[sideIndex] || 'Fronte';
-    const mockupUrl = _cp?.mockups?.[_side];
-
-    if (mockupUrl) {
-      fabric.Image.fromURL(mockupUrl, (img) => {
-        if (!img) { canvas.renderAll(); return; }
-        img.scaleToWidth(canvas.width);
-        img.scaleToHeight(canvas.height);
-        // Overlay con multiply — bianco diventa trasparente, ombre rimangono
-        canvas.setOverlayImage(img, canvas.renderAll.bind(canvas), {
-          originX: 'left', originY: 'top',
-          globalCompositeOperation: 'multiply',
-        });
-      });
-    } else {
-      canvas.setOverlayImage(null, canvas.renderAll.bind(canvas));
-    }
-
-    canvas.renderAll();
-  }, [productColor, product, sideIndex, canvasReady]);
+  // Colore prodotto — gestito via CSS sul mockup HTML
 
   const [canUndo, setCanUndo] = useState(false);
   const [canRedo, setCanRedo] = useState(false);
@@ -2567,7 +2522,7 @@ function DesignerApp() {
               flexShrink: 0,
             }}>
 
-            {/* Sfondo bianco — colore e mockup gestiti dentro Fabric (tecnica Lumise) */}
+            {/* Sfondo bianco */}
             <div style={{
               position:'absolute', top:0, left:0, width:400, height:svgH,
               background:'#ffffff',
@@ -2575,8 +2530,20 @@ function DesignerApp() {
               borderRadius:4,
               zIndex:1, pointerEvents:'none',
             }} />
-            {/* Fallback SVG se no mockup */}
-            {!currentProduct?.mockups?.[currentSideName] && (
+
+            {/* Mockup PNG — visibile, gestione colore TODO */}
+            {currentProduct?.mockups?.[currentSideName] ? (
+              <img
+                src={currentProduct.mockups[currentSideName]}
+                alt={currentSideName}
+                style={{
+                  position:'absolute', top:0, left:0,
+                  width:400, height:svgH,
+                  objectFit:'contain',
+                  zIndex:2, pointerEvents:'none',
+                }}
+              />
+            ) : (
               <div style={{ position:'absolute', top:0, left:0, width:400, height:svgH, zIndex:2, pointerEvents:'none' }}
                 dangerouslySetInnerHTML={{ __html: svgContent }} />
             )}
