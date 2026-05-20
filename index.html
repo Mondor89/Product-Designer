@@ -2871,68 +2871,314 @@ const NAV = [
   { id:'images',    label:'Immagini',     icon:'🖼'  },
 ];
 
+// ── ANTEPRIMA ZONA STAMPA — trascinabile e ridimensionabile ──
+function MockupZoneEditor({ product, zone, onChange }) {
+  const PREVIEW_W = 280; // larghezza anteprima in px
+  const [previewSide, setPreviewSide] = useState('Fronte');
+  const containerRef = useRef();
+  const dragRef = useRef(null);
+
+  // URL mockup costruito automaticamente dall'id prodotto
+  const GITHUB_BASE = 'https://raw.githubusercontent.com/Mondor89/Product-Designer/main/mockups/';
+  const mockupUrl = GITHUB_BASE + product.id + '/' + (previewSide === 'Fronte' ? 'fronte' : 'retro') + '.png';
+
+  // Scala: PREVIEW_W px = productWidthCm cm
+  const pWcm = product.productWidthCm || 50;
+  const scale = PREVIEW_W / pWcm; // px per cm
+  const previewH = Math.round(PREVIEW_W * 1.2); // altezza proporzionale
+
+  // Zona in px per l'anteprima
+  const zPx = {
+    x: Math.round((zone.x || 0) * scale),
+    y: Math.round((zone.y || 0) * scale),
+    w: Math.round((zone.w || 10) * scale),
+    h: Math.round((zone.h || 10) * scale),
+  };
+
+  // Converti px→cm e notifica cambio
+  const pxToCm = (px) => Math.round((px / scale) * 10) / 10;
+
+  // ── Drag (sposta) ──
+  const startDrag = (e) => {
+    e.preventDefault();
+    const rect = containerRef.current.getBoundingClientRect();
+    const startX = (e.touches ? e.touches[0].clientX : e.clientX) - rect.left - zPx.x;
+    const startY = (e.touches ? e.touches[0].clientY : e.clientY) - rect.top  - zPx.y;
+    const onMove = (ev) => {
+      const cx = (ev.touches ? ev.touches[0].clientX : ev.clientX) - rect.left;
+      const cy = (ev.touches ? ev.touches[0].clientY : ev.clientY) - rect.top;
+      const nx = Math.max(0, Math.min(cx - startX, PREVIEW_W - zPx.w));
+      const ny = Math.max(0, Math.min(cy - startY, previewH - zPx.h));
+      onChange({ ...zone, x: pxToCm(nx), y: pxToCm(ny) });
+    };
+    const onUp = () => {
+      window.removeEventListener('mousemove', onMove);
+      window.removeEventListener('mouseup', onUp);
+      window.removeEventListener('touchmove', onMove);
+      window.removeEventListener('touchend', onUp);
+    };
+    window.addEventListener('mousemove', onMove);
+    window.addEventListener('mouseup', onUp);
+    window.addEventListener('touchmove', onMove, { passive:false });
+    window.addEventListener('touchend', onUp);
+  };
+
+  // ── Resize (angolo in basso a destra) ──
+  const startResize = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    const rect = containerRef.current.getBoundingClientRect();
+    const startX = (e.touches ? e.touches[0].clientX : e.clientX);
+    const startY = (e.touches ? e.touches[0].clientY : e.clientY);
+    const origW = zPx.w;
+    const origH = zPx.h;
+    const onMove = (ev) => {
+      const dx = (ev.touches ? ev.touches[0].clientX : ev.clientX) - startX;
+      const dy = (ev.touches ? ev.touches[0].clientY : ev.clientY) - startY;
+      const nw = Math.max(20, Math.min(origW + dx, PREVIEW_W - zPx.x));
+      const nh = Math.max(20, Math.min(origH + dy, previewH - zPx.y));
+      onChange({ ...zone, w: pxToCm(nw), h: pxToCm(nh) });
+    };
+    const onUp = () => {
+      window.removeEventListener('mousemove', onMove);
+      window.removeEventListener('mouseup', onUp);
+      window.removeEventListener('touchmove', onMove);
+      window.removeEventListener('touchend', onUp);
+    };
+    window.addEventListener('mousemove', onMove);
+    window.addEventListener('mouseup', onUp);
+    window.addEventListener('touchmove', onMove, { passive:false });
+    window.addEventListener('touchend', onUp);
+  };
+
+  // Lati disponibili con mockup
+  const availableSides = (product.sides || ['Fronte','Retro']).filter(s =>
+    !product.mockups || product.mockups[s] !== null
+  );
+
+  return (
+    <div>
+      {/* Tab lato */}
+      {availableSides.length > 1 && (
+        <div style={{ display:'flex', gap:4, marginBottom:8 }}>
+          {availableSides.map(s => (
+            <button key={s} onClick={() => setPreviewSide(s)}
+              style={{ padding:'3px 10px', borderRadius:12, border:'none', cursor:'pointer',
+                fontSize:11, fontWeight:500,
+                background: previewSide===s ? '#3fc7ba' : '#f0f0f0',
+                color: previewSide===s ? '#fff' : '#555' }}>
+              {s}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {/* Anteprima */}
+      <div ref={containerRef}
+        style={{ position:'relative', width:PREVIEW_W, height:previewH,
+          background:'#fff', borderRadius:8, overflow:'hidden',
+          border:'1px solid #e0e0e0', userSelect:'none', flexShrink:0 }}>
+
+        {/* Mockup immagine */}
+        <img src={mockupUrl} alt={previewSide}
+          style={{ width:'100%', height:'100%', objectFit:'contain',
+            pointerEvents:'none', display:'block' }}
+          onError={e => { e.target.style.opacity = '0.2'; }} />
+
+        {/* Zona stampa trascinabile */}
+        <div
+          onMouseDown={startDrag}
+          onTouchStart={startDrag}
+          style={{
+            position:'absolute',
+            left: zPx.x, top: zPx.y,
+            width: zPx.w, height: zPx.h,
+            border: '2px dashed #3fc7ba',
+            background: 'rgba(63,199,186,0.08)',
+            cursor: 'move',
+            borderRadius: 2,
+            boxSizing: 'border-box',
+          }}>
+          {/* Label dimensioni */}
+          <div style={{ position:'absolute', top:-18, left:0, fontSize:9,
+            color:'#3fc7ba', fontWeight:700, whiteSpace:'nowrap' }}>
+            {zone.w}×{zone.h} cm
+          </div>
+          {/* Handle resize angolo basso dx */}
+          <div
+            onMouseDown={startResize}
+            onTouchStart={startResize}
+            style={{
+              position:'absolute', right:-5, bottom:-5,
+              width:12, height:12,
+              background:'#3fc7ba', borderRadius:2,
+              cursor:'se-resize',
+            }} />
+        </div>
+      </div>
+
+      {/* Campi CM manuali */}
+      <div style={{ display:'grid', gridTemplateColumns:'repeat(4,1fr)', gap:6, marginTop:10 }}>
+        {[['x','← X'],['y','↕ Y'],['w','↔ W'],['h','↕ H']].map(([f,lbl]) => (
+          <div key={f}>
+            <div style={{ fontSize:9, fontWeight:700, color:'#888', marginBottom:2 }}>{lbl} (cm)</div>
+            <input type="number" step="0.5" value={zone[f] || 0}
+              onChange={e => onChange({ ...zone, [f]: parseFloat(e.target.value)||0 })}
+              style={{ ...inp, fontSize:12, padding:'4px 6px' }} />
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 // ── PRODUCTS TAB ───────────────────────────────────────────────
 function ProductsTab({ toast }) {
   const [products, setProducts] = useState(() => AdminStore.get('products'));
   const [editing, setEditing] = useState(null);
   const [newColor, setNewColor] = useState('#ffffff');
+  const TAGLIE = ['XS','S','M','L','XL','XXL','3XL'];
 
-  const save = (updated) => { const p = products.map(x => x.id===updated.id ? updated : x); setProducts(p); AdminStore.set('products', p); toast('Salvato!'); };
+  const save = (updated) => {
+    const p = products.map(x => x.id===updated.id ? updated : x);
+    setProducts(p); AdminStore.set('products', p); toast('Salvato!');
+  };
   const addColor = (p) => { if (!p.colors.includes(newColor)) save({...p, colors:[...p.colors, newColor]}); };
   const removeColor = (p, c) => save({...p, colors:p.colors.filter(x=>x!==c)});
-  const updateZone = (p, field, val) => save({...p, printZoneCm:{...p.printZoneCm, [field]: parseFloat(val)||0}});
+  const toggleTaglia = (p, t) => {
+    const taglie = p.taglie || [];
+    save({...p, taglie: taglie.includes(t) ? taglie.filter(x=>x!==t) : [...taglie, t]});
+  };
 
   return (
     <div>
       <h2 style={{ fontSize:18, fontWeight:700, marginBottom:16, color:'#2d3142' }}>Gestione Prodotti</h2>
       {products.map(p => (
         <div key={p.id} style={card}>
+          {/* Header prodotto */}
           <div style={{ display:'flex', alignItems:'center', gap:10, marginBottom:12 }}>
             <span style={{ fontSize:26 }}>{p.icon}</span>
             <div style={{ flex:1 }}>
               <div style={{ fontWeight:700, fontSize:15 }}>{p.name}</div>
-              <div style={{ fontSize:11, color:'#888' }}>{p.sides.join(' · ')}</div>
+              <div style={{ fontSize:11, color:'#888' }}>
+                {(p.sides||[]).filter(s => !p.mockups || p.mockups[s] !== null).join(' · ')}
+                {p.sku ? <span style={{ marginLeft:8, color:'#aaa' }}>SKU: {p.sku}</span> : null}
+              </div>
             </div>
-            <button onClick={() => setEditing(editing===p.id ? null : p.id)} style={ghost}>
-              {editing===p.id ? '▲ Chiudi' : '✏️ Modifica'}
-            </button>
+            <div style={{ display:'flex', alignItems:'center', gap:8 }}>
+              {/* Toggle attivo/nascosto */}
+              <div onClick={() => save({...p, active: p.active===false ? true : false})}
+                style={{ width:36, height:20, borderRadius:10, cursor:'pointer',
+                  background: p.active===false ? '#ddd' : '#3fc7ba',
+                  position:'relative', transition:'background 0.2s' }}>
+                <div style={{ position:'absolute', top:2,
+                  left: p.active===false ? 2 : 18,
+                  width:16, height:16, borderRadius:'50%',
+                  background:'#fff', transition:'left 0.2s',
+                  boxShadow:'0 1px 3px rgba(0,0,0,0.2)' }} />
+              </div>
+              <span style={{ fontSize:10, color:'#888' }}>{p.active===false ? 'Nascosto' : 'Attivo'}</span>
+              <button onClick={() => setEditing(editing===p.id ? null : p.id)} style={ghost}>
+                {editing===p.id ? '▲ Chiudi' : '✏️ Modifica'}
+              </button>
+            </div>
           </div>
 
           {editing===p.id && (
             <div style={{ animation:'fadeIn 0.15s ease' }}>
-              <hr style={{ border:'none', borderTop:'1px solid #f0f0f0', marginBottom:14 }} />
+              <hr style={{ border:'none', borderTop:'1px solid #f0f0f0', marginBottom:16 }} />
 
-              {/* Print zone in CM */}
-              <div style={{ marginBottom:14 }}>
-                <div style={{ fontWeight:600, fontSize:13, marginBottom:8, color:'#555' }}>Zona di Stampa (cm)</div>
-                <div style={{ display:'grid', gridTemplateColumns:'repeat(4,1fr)', gap:8 }}>
-                  {[['x','LEFT'],['y','TOP'],['w','WIDTH'],['h','HEIGHT']].map(([f,lbl]) => (
-                    <div key={f}>
-                      <label style={label}>{lbl}</label>
-                      <input type="number" step="0.5"
-                        value={(p.printZoneCm || {})[f] || 0}
-                        onChange={e => updateZone(p,f,e.target.value)} style={inp} />
-                    </div>
-                  ))}
-                </div>
-              </div>
+              <div style={{ display:'flex', gap:20, flexWrap:'wrap' }}>
 
-              {/* Colors */}
-              <div>
-                <div style={{ fontWeight:600, fontSize:13, marginBottom:8, color:'#555' }}>Colori Disponibili</div>
-                <div style={{ display:'flex', flexWrap:'wrap', gap:4, marginBottom:8 }}>
-                  {p.colors.map(c => (
-                    <div key={c} style={{ display:'flex', alignItems:'center', gap:4, background:'#f5f5f5', borderRadius:20, padding:'3px 8px 3px 4px' }}>
-                      <div style={{ width:16, height:16, borderRadius:'50%', background:c, border:'1px solid #ddd' }} />
-                      <span style={{ fontSize:11, color:'#555' }}>{c}</span>
-                      <span onClick={() => removeColor(p,c)} style={{ cursor:'pointer', color:'#e74c3c', fontSize:12, marginLeft:2 }}>✕</span>
-                    </div>
-                  ))}
+                {/* ── Colonna sinistra: anteprima zona stampa ── */}
+                <div style={{ flexShrink:0 }}>
+                  <div style={{ fontWeight:600, fontSize:12, color:'#555', marginBottom:8 }}>
+                    ANTEPRIMA ZONA STAMPA
+                  </div>
+                  <MockupZoneEditor
+                    product={p}
+                    zone={p.printZoneCm || {x:11,y:9,w:28,h:34}}
+                    onChange={zone => save({...p, printZoneCm: zone})}
+                  />
                 </div>
-                <div style={{ display:'flex', gap:8, alignItems:'center' }}>
-                  <input type="color" value={newColor} onChange={e => setNewColor(e.target.value)}
-                    style={{ width:36, height:36, padding:2, border:'1px solid #ddd', borderRadius:6, cursor:'pointer' }} />
-                  <button onClick={() => addColor(p)} style={btn()}>+ Aggiungi colore</button>
+
+                {/* ── Colonna destra: tutti i campi ── */}
+                <div style={{ flex:1, minWidth:220 }}>
+
+                  {/* Nome prodotto */}
+                  <div style={{ marginBottom:12 }}>
+                    <label style={label}>NOME PRODOTTO</label>
+                    <input value={p.name} onChange={e => save({...p, name:e.target.value})}
+                      style={inp} placeholder="es. T-Shirt Premium" />
+                  </div>
+
+                  {/* SKU fornitore */}
+                  <div style={{ marginBottom:12 }}>
+                    <label style={label}>SKU / CODICE FORNITORE</label>
+                    <input value={p.sku||''} onChange={e => save({...p, sku:e.target.value})}
+                      style={inp} placeholder="es. BC3001 / Printful #71" />
+                  </div>
+
+                  {/* Prezzo base */}
+                  <div style={{ marginBottom:12 }}>
+                    <label style={label}>PREZZO BASE (€)</label>
+                    <input type="number" step="0.01" value={p.price||''} onChange={e => save({...p, price:parseFloat(e.target.value)||0})}
+                      style={inp} placeholder="es. 12.50" />
+                  </div>
+
+                  {/* Taglie */}
+                  <div style={{ marginBottom:12 }}>
+                    <label style={label}>TAGLIE DISPONIBILI</label>
+                    <div style={{ display:'flex', gap:6, flexWrap:'wrap', marginTop:4 }}>
+                      {TAGLIE.map(t => {
+                        const active = (p.taglie||[]).includes(t);
+                        return (
+                          <div key={t} onClick={() => toggleTaglia(p,t)}
+                            style={{ padding:'4px 10px', borderRadius:6, cursor:'pointer',
+                              fontSize:12, fontWeight:600,
+                              background: active ? '#3fc7ba' : '#f0f0f0',
+                              color: active ? '#fff' : '#666',
+                              border: active ? '1px solid #3fc7ba' : '1px solid #e0e0e0',
+                              transition:'all 0.15s' }}>
+                            {t}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  {/* Larghezza reale prodotto */}
+                  <div style={{ marginBottom:12 }}>
+                    <label style={label}>LARGHEZZA REALE PRODOTTO (cm)</label>
+                    <input type="number" step="1" value={p.productWidthCm||50}
+                      onChange={e => save({...p, productWidthCm:parseFloat(e.target.value)||50})}
+                      style={inp} placeholder="50" />
+                    <div style={{ fontSize:10, color:'#aaa', marginTop:3 }}>
+                      Usata per calcolare la scala zona stampa
+                    </div>
+                  </div>
+
+                  {/* Colori */}
+                  <div>
+                    <label style={label}>COLORI DISPONIBILI</label>
+                    <div style={{ display:'flex', flexWrap:'wrap', gap:4, marginBottom:8, marginTop:4 }}>
+                      {p.colors.map(c => (
+                        <div key={c} style={{ display:'flex', alignItems:'center', gap:4,
+                          background:'#f5f5f5', borderRadius:20, padding:'3px 8px 3px 4px' }}>
+                          <div style={{ width:16, height:16, borderRadius:'50%', background:c, border:'1px solid #ddd' }} />
+                          <span style={{ fontSize:11, color:'#555' }}>{c}</span>
+                          <span onClick={() => removeColor(p,c)}
+                            style={{ cursor:'pointer', color:'#e74c3c', fontSize:12, marginLeft:2 }}>✕</span>
+                        </div>
+                      ))}
+                    </div>
+                    <div style={{ display:'flex', gap:8, alignItems:'center' }}>
+                      <input type="color" value={newColor} onChange={e => setNewColor(e.target.value)}
+                        style={{ width:36, height:36, padding:2, border:'1px solid #ddd', borderRadius:6, cursor:'pointer' }} />
+                      <button onClick={() => addColor(p)} style={btn()}>+ Aggiungi colore</button>
+                    </div>
+                  </div>
+
                 </div>
               </div>
             </div>
