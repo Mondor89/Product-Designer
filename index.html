@@ -78,11 +78,75 @@ window.DesignerHistory = {
 window.AdminStore = {
   DEFAULTS: {
     products: [
-      { id:'tshirt',   name:'T-Shirt',      icon:'👕', sides:['Fronte','Retro','Sinistra','Destra'], colors:['#ffffff','#000000','#e74c3c','#3498db','#2ecc71','#f39c12','#9b59b6'], printZone:{ left:135, top:115, width:130, height:160 } },
-      { id:'hoodie',   name:'Felpa',        icon:'🧥', sides:['Fronte','Retro','Sinistra','Destra'], colors:['#ffffff','#000000','#e74c3c','#2c3e50','#9b59b6'],                       printZone:{ left:135, top:120, width:130, height:160 } },
-      { id:'hoodie2',  name:'Hoodie',       icon:'🥷', sides:['Fronte','Retro','Sinistra','Destra'], colors:['#ffffff','#000000','#e74c3c','#2c3e50','#3498db','#9b59b6'],              printZone:{ left:135, top:120, width:130, height:160 } },
-      { id:'longsleeve', name:'Manica Lunga', icon:'🦺', sides:['Fronte','Retro'],                   colors:['#ffffff','#000000','#e74c3c','#3498db','#2ecc71','#2c3e50'],              printZone:{ left:135, top:115, width:130, height:160 } },
-      { id:'vneck',    name:'V-Neck',       icon:'👔', sides:['Fronte','Retro'],                     colors:['#ffffff','#000000','#e74c3c','#3498db','#2ecc71','#f39c12'],              printZone:{ left:135, top:115, width:130, height:160 } },
+      {
+        id:'tshirt', name:'T-Shirt', icon:'👕',
+        // lati disponibili — appare tab solo se mockup esiste
+        sides:['Fronte','Retro','Sinistra','Destra'],
+        // mockup PNG da GitHub (sfondo trasparente o bianco)
+        mockups:{
+          Fronte:   'https://raw.githubusercontent.com/Mondor89/Product-Designer/main/mockups/tshirt/fronte.png',
+          Retro:    'https://raw.githubusercontent.com/Mondor89/Product-Designer/main/mockups/tshirt/retro.png',
+          Sinistra: null,
+          Destra:   null,
+        },
+        colors:['#ffffff','#000000','#e74c3c','#3498db','#2ecc71','#f39c12','#9b59b6'],
+        // zona stampa in CM — larghezza reale prodotto = 50cm = 400px canvas
+        printZoneCm:{ x:11, y:9, w:28, h:34 },
+        // larghezza reale prodotto in CM (per conversione CM→px)
+        productWidthCm: 50,
+      },
+      {
+        id:'felpa', name:'Felpa', icon:'🧥',
+        sides:['Fronte','Retro','Sinistra','Destra'],
+        mockups:{
+          Fronte:   'https://raw.githubusercontent.com/Mondor89/Product-Designer/main/mockups/felpa/fronte.png',
+          Retro:    'https://raw.githubusercontent.com/Mondor89/Product-Designer/main/mockups/felpa/retro.png',
+          Sinistra: null,
+          Destra:   null,
+        },
+        colors:['#ffffff','#000000','#e74c3c','#2c3e50','#9b59b6'],
+        printZoneCm:{ x:11, y:10, w:28, h:34 },
+        productWidthCm: 50,
+      },
+      {
+        id:'hoodie', name:'Hoodie', icon:'🥷',
+        sides:['Fronte','Retro','Sinistra','Destra'],
+        mockups:{
+          Fronte:   'https://raw.githubusercontent.com/Mondor89/Product-Designer/main/mockups/hoodie/fronte.png',
+          Retro:    'https://raw.githubusercontent.com/Mondor89/Product-Designer/main/mockups/hoodie/retro.png',
+          Sinistra: null,
+          Destra:   null,
+        },
+        colors:['#ffffff','#000000','#e74c3c','#2c3e50','#3498db','#9b59b6'],
+        printZoneCm:{ x:11, y:12, w:28, h:32 },
+        productWidthCm: 50,
+      },
+      {
+        id:'manica_lunga', name:'Manica Lunga', icon:'🦺',
+        sides:['Fronte','Retro','Sinistra','Destra'],
+        mockups:{
+          Fronte:   'https://raw.githubusercontent.com/Mondor89/Product-Designer/main/mockups/manica_lunga/fronte.png',
+          Retro:    'https://raw.githubusercontent.com/Mondor89/Product-Designer/main/mockups/manica_lunga/retro.png',
+          Sinistra: null,
+          Destra:   null,
+        },
+        colors:['#ffffff','#000000','#e74c3c','#3498db','#2ecc71','#2c3e50'],
+        printZoneCm:{ x:11, y:9, w:28, h:34 },
+        productWidthCm: 50,
+      },
+      {
+        id:'vneck', name:'V-Neck', icon:'👔',
+        sides:['Fronte','Retro','Sinistra','Destra'],
+        mockups:{
+          Fronte:   'https://raw.githubusercontent.com/Mondor89/Product-Designer/main/mockups/vneck/fronte.png',
+          Retro:    'https://raw.githubusercontent.com/Mondor89/Product-Designer/main/mockups/vneck/retro.png',
+          Sinistra: null,
+          Destra:   null,
+        },
+        colors:['#ffffff','#000000','#e74c3c','#3498db','#2ecc71','#f39c12'],
+        printZoneCm:{ x:11, y:9, w:28, h:34 },
+        productWidthCm: 50,
+      },
     ],
     cliparts: [
       { id:'star',      svg:'<polygon points="12,2 15.09,8.26 22,9.27 17,14.14 18.18,21.02 12,17.77 5.82,21.02 7,14.14 2,9.27 8.91,8.26" fill="currentColor"/>', label:'Stella' },
@@ -1440,11 +1504,16 @@ fabric.CurvedText = CurvedText;
 
 
 const DESIGN_ZONES = {
-  tshirt:     { left: 135, top: 115, width: 130, height: 160 },
-  hoodie:     { left: 135, top: 120, width: 130, height: 160 },
-  hoodie2:    { left: 135, top: 140, width: 130, height: 150 },
-  longsleeve: { left: 135, top: 115, width: 130, height: 160 },
-  vneck:      { left: 135, top: 115, width: 130, height: 160 },
+  // Zone stampa calcolate da CM — formula: px = cm * (400 / productWidthCm)
+  // productWidthCm=50 → 1cm = 8px
+  tshirt:      { left: 88,  top: 72,  width: 224, height: 272 },
+  felpa:       { left: 88,  top: 80,  width: 224, height: 272 },
+  hoodie:      { left: 88,  top: 96,  width: 224, height: 256 },
+  manica_lunga:{ left: 88,  top: 72,  width: 224, height: 272 },
+  vneck:       { left: 88,  top: 72,  width: 224, height: 272 },
+  // legacy (non più usati ma mantenuti per compatibilità)
+  hoodie2:     { left: 88,  top: 96,  width: 224, height: 256 },
+  longsleeve:  { left: 88,  top: 72,  width: 224, height: 272 },
 };
 
 // ─── LAYERS PANEL ──────────────────────────────────────────────
@@ -1538,7 +1607,7 @@ function LogoButton({ isMobile, logoInputRef, logoSrc, onLogoUpload }) {
         style={{ position:'relative', width: isMobile?36:160, height: isMobile?36:44,
           borderRadius: isMobile?8:10, overflow:'hidden', cursor:'pointer',
           display:'flex', alignItems:'center', justifyContent:'center',
-          background: logoSrc ? 'transparent' : 'linear-gradient(135deg,#3fc7ba,#1db8aa)',
+          background: 'transparent',
           border:'1px solid rgba(255,255,255,0.15)', flexShrink:0,
           userSelect:'none', WebkitUserSelect:'none' }}>
         {/* Anello progresso long-press */}
@@ -1689,7 +1758,15 @@ function DesignerApp() {
   const currentSideKey = `${product}_${sideIndex}`;
 
   const currentProduct = PRODUCTS.find((p) => p.id === product) || PRODUCTS[0];
-  const zone = currentProduct?.printZone || { left:135, top:115, width:130, height:160 };
+  // Nome lato corrente (es. 'Fronte', 'Retro') — usato per caricare mockup
+  const currentSideName = currentProduct?.sides?.[sideIndex] || 'Fronte';
+  // Zona stampa: se prodotto ha printZoneCm, calcola px (1cm = 400/productWidthCm px)
+  const cmToPx = currentProduct?.productWidthCm ? (400 / currentProduct.productWidthCm) : 8;
+  const pz = currentProduct?.printZoneCm;
+  const zone = pz
+    ? { left: Math.round(pz.x * cmToPx), top: Math.round(pz.y * cmToPx),
+        width: Math.round(pz.w * cmToPx), height: Math.round(pz.h * cmToPx) }
+    : (currentProduct?.printZone || { left:135, top:115, width:130, height:160 });
   const scale = zoom / 100;
   const productColors = currentProduct?.colors || ['#ffffff','#000000'];
 
@@ -2307,10 +2384,12 @@ function DesignerApp() {
         {[['↩', () => DesignerHistory.undo(window.DesignerCanvas), !canUndo],
           ['↪', () => DesignerHistory.redo(window.DesignerCanvas), !canRedo]].map(([ico,fn,dis],i) => (
           <button key={i} onClick={fn} disabled={dis}
-            style={{ background:'none', border:'1px solid rgba(255,255,255,0.12)',
-              color: dis ? '#444' : '#bbb', borderRadius:5,
+            style={{ background:'rgba(255,255,255,0.1)',
+              border:'1px solid rgba(255,255,255,0.25)',
+              color: dis ? '#555' : '#fff', borderRadius:5,
               padding: isMobile ? '3px 8px' : '4px 10px',
-              cursor: dis ? 'not-allowed' : 'pointer', fontSize:15, flexShrink:0 }}>
+              cursor: dis ? 'not-allowed' : 'pointer', fontSize:15,
+              flexShrink:0, opacity: dis ? 0.35 : 1 }}>
             {ico}
           </button>
         ))}
@@ -2401,7 +2480,7 @@ function DesignerApp() {
         {/* ── Canvas centrale ── */}
         <div style={{ flex:1, display:'flex', flexDirection:'column', alignItems:'center',
           justifyContent: isMobile ? 'flex-start' : 'center',
-          background:'#ebeced', overflow:'hidden', position:'relative',
+          background:'#e0e0e0', overflow:'hidden', position:'relative',
           paddingTop: isMobile ? 8 : 0,
           paddingBottom: isMobile ? 110 : 0 }}>
 
@@ -2444,9 +2523,33 @@ function DesignerApp() {
               flexShrink: 0,
             }}>
 
-            {/* SVG prodotto */}
-            <div style={{ position:'absolute', top:0, left:0, width:400, height:svgH, zIndex:1, pointerEvents:'none' }}
-              dangerouslySetInnerHTML={{ __html: svgContent }} />
+            {/* ── Sfondo bianco prodotto (stile Lumise) ── */}
+            <div style={{
+              position:'absolute', top:0, left:0, width:400, height:svgH,
+              background:'#ffffff',
+              borderRadius:4,
+              boxShadow:'0 2px 16px rgba(0,0,0,0.10)',
+              zIndex:0, pointerEvents:'none'
+            }} />
+
+            {/* ── Mockup PNG da GitHub — sopra sfondo bianco ── */}
+            {currentProduct?.mockups?.[currentSideName] ? (
+              <img
+                src={currentProduct.mockups[currentSideName]}
+                alt={currentSideName}
+                style={{
+                  position:'absolute', top:0, left:0,
+                  width:400, height:svgH,
+                  objectFit:'contain',
+                  zIndex:1, pointerEvents:'none',
+                  mixBlendMode:'multiply'
+                }}
+              />
+            ) : (
+              // Fallback SVG generato se mockup non disponibile
+              <div style={{ position:'absolute', top:0, left:0, width:400, height:svgH, zIndex:1, pointerEvents:'none' }}
+                dangerouslySetInnerHTML={{ __html: svgContent }} />
+            )}
 
             {/* Zona stampa tratteggiata */}
             {/* Zona tratteggiata — id per toggle DOM diretto senza re-render */}
@@ -2458,7 +2561,7 @@ function DesignerApp() {
               transition:'opacity 0.2s' }}>
               <div style={{ position:'absolute', bottom:-16, left:0, fontSize:9, whiteSpace:'nowrap',
                 color:'rgba(63,199,186,0.7)', fontWeight:600 }}>
-                Zona stampa {zone.width}×{zone.height}px
+                Zona stampa {currentProduct?.printZoneCm ? `${currentProduct.printZoneCm.w}×${currentProduct.printZoneCm.h}cm` : `${zone.width}×${zone.height}px`}
               </div>
             </div>
 
