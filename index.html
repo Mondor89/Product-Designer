@@ -737,33 +737,24 @@ function LeftPanel({ onAddElement, products, currentProduct, onProductChange }) 
   return (
     <div ref={panelRef} style={{ position:'relative', display:'flex', height:'100%', zIndex:50 }}>
       {/* Icon column */}
-      <div style={{ width:56, background:'#2d3142', display:'flex', flexDirection:'column', alignItems:'center', paddingTop:8, gap:2, flexShrink:0 }}>
+      <div style={{ width:72, background:'#2d3142', display:'flex', flexDirection:'column', alignItems:'center', paddingTop:8, gap:2, flexShrink:0 }}>
         {TABS.map(t => (
           <button key={t.id} onClick={() => setActiveTab(t.id)} title={t.label}
-            style={{ width:46, padding:'8px 4px', background:activeTab===t.id?'rgba(63,199,186,0.18)':'none',
+            style={{ width:62, padding:'10px 4px', background:activeTab===t.id?'rgba(63,199,186,0.18)':'none',
               border:'none', cursor:'pointer', color:activeTab===t.id?'#3fc7ba':'#8892b0',
               display:'flex', flexDirection:'column', alignItems:'center', borderRadius:6,
               transition:'all 0.15s', borderLeft:activeTab===t.id?'3px solid #3fc7ba':'3px solid transparent' }}>
-            <span style={{ fontSize:t.id==='text'?16:14 }}>{t.icon}</span>
-            <span style={{ fontSize:8, marginTop:2 }}>{t.label}</span>
+            <span style={{ fontSize:t.id==='text'?20:18 }}>{t.icon}</span>
+            <span style={{ fontSize:9, marginTop:3, fontWeight:500 }}>{t.label}</span>
           </button>
         ))}
-        {/* Admin link */}
-        <div style={{ marginTop:'auto', paddingBottom:10 }}>
-          <a href="#admin" title="Pannello Admin"
-            style={{ display:'flex', flexDirection:'column', alignItems:'center', color:'#4a5270',
-              textDecoration:'none', padding:'6px 4px', borderRadius:6, transition:'color 0.15s' }}
-            onMouseEnter={e => e.currentTarget.style.color='#8892b0'}
-            onMouseLeave={e => e.currentTarget.style.color='#4a5270'}>
-            <span style={{ fontSize:14 }}>⚙</span>
-            <span style={{ fontSize:7, marginTop:1 }}>Admin</span>
-          </a>
-        </div>
+        {/* Admin link rimosso — accesso solo via long-press logo 3s */}
+        <div style={{ marginTop:'auto' }} />
       </div>
 
       {/* Flyout */}
       {activeTab && (
-        <div style={{ position:'absolute', left:56, top:0, width:270, height:'100%', background:'#fff',
+        <div style={{ position:'absolute', left:72, top:0, width:270, height:'100%', background:'#fff',
           boxShadow:'4px 0 20px rgba(0,0,0,0.12)', display:'flex', flexDirection:'column',
           animation:'slideIn 0.15s ease', overflow:'hidden' }}
           onClick={e => e.stopPropagation()}>
@@ -1544,8 +1535,8 @@ function LogoButton({ isMobile, logoInputRef, logoSrc, onLogoUpload }) {
         onMouseDown={startPress} onMouseUp={cancelPress} onMouseLeave={cancelPress}
         onTouchStart={startPress} onTouchEnd={cancelPress}
         title="Tieni premuto 3 secondi per accesso admin"
-        style={{ position:'relative', width: isMobile?30:34, height: isMobile?30:34,
-          borderRadius:7, overflow:'hidden', cursor:'pointer',
+        style={{ position:'relative', width: isMobile?36:160, height: isMobile?36:44,
+          borderRadius: isMobile?8:10, overflow:'hidden', cursor:'pointer',
           display:'flex', alignItems:'center', justifyContent:'center',
           background: logoSrc ? 'transparent' : 'linear-gradient(135deg,#3fc7ba,#1db8aa)',
           border:'1px solid rgba(255,255,255,0.15)', flexShrink:0,
@@ -1571,13 +1562,7 @@ function LogoButton({ isMobile, logoInputRef, logoSrc, onLogoUpload }) {
           width:'100%', height:'100%' }}>W</span>
       </div>
 
-      {/* Nome app — solo desktop */}
-      {!isMobile && (
-        <div style={{ pointerEvents:'none' }}>
-          <div style={{ color:'#fff', fontWeight:700, fontSize:14, lineHeight:1 }}>WonderSpit</div>
-          <div style={{ color:'#8892b0', fontSize:10 }}>Product Designer</div>
-        </div>
-      )}
+      {/* Nome app rimosso — il logo esteso già contiene il brand */}
     </div>
   );
 }
@@ -1610,7 +1595,7 @@ function useCanvasBaseScale(bp) {
   const [baseScale, setBaseScale] = React.useState(1);
   React.useEffect(() => {
     const calc = () => {
-      const leftW = bp === 'mobile' ? 0 : 56;
+      const leftW = bp === 'mobile' ? 0 : 72;
       const topH  = bp === 'mobile' ? 48 : 52;
       const botH  = bp === 'mobile' ? 110 : 50;
       const avW = window.innerWidth  - leftW - 24;
@@ -2238,7 +2223,21 @@ function DesignerApp() {
 
   // ── Admin export gate ────────────────────────────────────────
   const ADMIN_PASSWORD = 'wonderspit2025'; // ← cambia qui la password admin
-  const [exportUnlocked, setExportUnlocked] = useState(false);
+  // exportUnlocked — variabile globale window, persiste tra render e navigazione hash
+  // window.__wsAdminOk viene impostato a true dopo login admin
+  const [exportUnlocked, setExportUnlocked] = useState(() => !!window.__wsAdminOk);
+  const unlockExport = () => { window.__wsAdminOk = true; setExportUnlocked(true); };
+
+  // Ri-controlla quando si torna da admin al designer
+  useEffect(() => {
+    const handler = () => {
+      if (window.location.hash !== '#admin') {
+        setExportUnlocked(!!window.__wsAdminOk);
+      }
+    };
+    window.addEventListener('hashchange', handler);
+    return () => window.removeEventListener('hashchange', handler);
+  }, []);
   const [showPwdModal, setShowPwdModal] = useState(false);
   const [pwdInput, setPwdInput] = useState('');
   const [pwdError, setPwdError] = useState(false);
@@ -2250,7 +2249,7 @@ function DesignerApp() {
 
   const checkPassword = () => {
     if (pwdInput === ADMIN_PASSWORD) {
-      setExportUnlocked(true); setShowPwdModal(false); doExport();
+      unlockExport(); setShowPwdModal(false); doExport();
     } else {
       setPwdError(true);
     }
@@ -2294,7 +2293,7 @@ function DesignerApp() {
     <div style={{ display:'flex', flexDirection:'column', height:'100vh', overflow:'hidden' }}>
 
       {/* ════ TOP BAR ════════════════════════════════════════════ */}
-      <div style={{ height: isMobile ? 48 : 52, background:'#2d3142', display:'flex',
+      <div style={{ height: isMobile ? 56 : 64, background:'#2d3142', display:'flex',
         alignItems:'center', padding: isMobile ? '0 10px' : '0 16px',
         gap: isMobile ? 6 : 10, flexShrink:0, boxShadow:'0 2px 8px rgba(0,0,0,0.25)', zIndex:10 }}>
 
@@ -2351,16 +2350,16 @@ function DesignerApp() {
             </button>
           )}
 
-          {/* Export admin — solo desktop */}
-          {!isMobile && (
+          {/* Export — visibile SOLO dopo login admin, mai ai clienti */}
+          {exportUnlocked && (
             <button onClick={exportPNG}
-              title={exportUnlocked ? 'Download PNG' : 'Solo admin'}
-              style={{ background: exportUnlocked ? 'rgba(63,199,186,0.2)' : 'rgba(255,255,255,0.1)',
-                border:`1px solid ${exportUnlocked ? '#3fc7ba' : 'rgba(255,255,255,0.2)'}`,
-                color: exportUnlocked ? '#3fc7ba' : '#fff', borderRadius:6,
+              title="Download PNG"
+              style={{ background:'rgba(63,199,186,0.2)',
+                border:'1px solid #3fc7ba',
+                color:'#3fc7ba', borderRadius:6,
                 padding:'6px 14px', cursor:'pointer', fontSize:12, fontWeight:500,
                 display:'flex', alignItems:'center', gap:4 }}>
-              <span>{exportUnlocked ? '🔓' : '🔒'}</span> ↓ SCARICA
+              ↓ SCARICA
             </button>
           )}
 
@@ -3140,7 +3139,7 @@ function AdminApp() {
 
   const toast = (msg) => setToastMsg(msg);
 
-  if (!authed) return <LoginGate onLogin={() => setAuthed(true)} />;
+  if (!authed) return <LoginGate onLogin={() => { setAuthed(true); window.__wsAdminOk = true; }} />;
 
   return (
     <div style={{ display:'flex', minHeight:'100vh' }}>
@@ -3163,7 +3162,7 @@ function AdminApp() {
           ))}
         </nav>
         <div style={{ padding:'14px 20px', borderTop:'1px solid rgba(255,255,255,0.08)' }}>
-          <a href="#"
+          <a href="#designer"
             style={{ fontSize:12, color:'#8892b0', textDecoration:'none', display:'flex', alignItems:'center', gap:6 }}>
             ← Torna al Designer
           </a>
