@@ -1746,94 +1746,7 @@ function MobileToolDrawer({ activeTab, onClose, onAddElement, products, currentP
 
 // ─── Clean combined App:
 
-// ── ProductColorLayer — colora la forma del prodotto via canvas 2D ──
-// Tecnica corretta per PNG con sfondo bianco:
-// 1. Carica il mockup nel canvas
-// 2. Legge i pixel e converte bianco→trasparente (sfondo) / grigio→semitrasparente (ombre)
-// 3. Sotto mette il colore scelto — il colore appare SOLO nella forma della t-shirt
-function ProductColorLayer({ mockupUrl, color, width, height }) {
-  const colorCanvasRef = React.useRef(); // canvas con solo il colore sagomato
-  const shadowCanvasRef = React.useRef(); // canvas con solo le ombre
-
-  React.useEffect(() => {
-    const colorCanvas = colorCanvasRef.current;
-    const shadowCanvas = shadowCanvasRef.current;
-    if (!colorCanvas || !shadowCanvas || !mockupUrl) return;
-
-    const img = new Image();
-    // Prova prima senza crossOrigin (funziona se Netlify serve i file)
-    img.onload = () => {
-      const offscreen = document.createElement('canvas');
-      offscreen.width = img.naturalWidth;
-      offscreen.height = img.naturalHeight;
-      const octx = offscreen.getContext('2d');
-      octx.drawImage(img, 0, 0);
-
-      const imageData = octx.getImageData(0, 0, offscreen.width, offscreen.height);
-      const d = imageData.data;
-
-      // Crea due versioni pixel per pixel:
-      // colorData: maschera opaca della t-shirt (per il colore sotto)
-      // shadowData: ombre semitrasparenti (per texture realistica)
-      const colorData = new Uint8ClampedArray(d.length);
-      const shadowData = new Uint8ClampedArray(d.length);
-
-      for (let i = 0; i < d.length; i += 4) {
-        const r = d[i], g = d[i+1], b = d[i+2];
-        // Luminosità pixel
-        const lum = (r * 0.299 + g * 0.587 + b * 0.114);
-        // Pixel molto chiari = sfondo bianco → trasparente
-        if (lum > 250) {
-          colorData[i+3] = 0;
-          shadowData[i+3] = 0;
-        } else {
-          // Pixel della t-shirt → opaco per il colore
-          colorData[i] = 255; colorData[i+1] = 255; colorData[i+2] = 255;
-          colorData[i+3] = 255;
-          // Ombre → scuro semitrasparente
-          const darkness = Math.max(0, 255 - lum);
-          shadowData[i] = 0; shadowData[i+1] = 0; shadowData[i+2] = 0;
-          shadowData[i+3] = Math.round(darkness * 0.6);
-        }
-      }
-
-      // Disegna colore sagomato
-      const cctx = colorCanvas.getContext('2d');
-      cctx.clearRect(0, 0, width, height);
-      // Riempie con il colore scelto
-      cctx.fillStyle = color || '#ffffff';
-      cctx.fillRect(0, 0, width, height);
-      // Applica maschera forma t-shirt
-      const maskCanvas = document.createElement('canvas');
-      maskCanvas.width = offscreen.width; maskCanvas.height = offscreen.height;
-      maskCanvas.getContext('2d').putImageData(new ImageData(colorData, offscreen.width, offscreen.height), 0, 0);
-      cctx.globalCompositeOperation = 'destination-in';
-      cctx.drawImage(maskCanvas, 0, 0, width, height);
-      cctx.globalCompositeOperation = 'source-over';
-
-      // Disegna ombre sopra il colore
-      const sctx = shadowCanvas.getContext('2d');
-      sctx.clearRect(0, 0, width, height);
-      const shadowImg = document.createElement('canvas');
-      shadowImg.width = offscreen.width; shadowImg.height = offscreen.height;
-      shadowImg.getContext('2d').putImageData(new ImageData(shadowData, offscreen.width, offscreen.height), 0, 0);
-      sctx.drawImage(shadowImg, 0, 0, width, height);
-    };
-    img.onerror = () => console.warn('Mockup non caricato:', mockupUrl);
-    img.src = mockupUrl;
-  }, [mockupUrl, color, width, height]);
-
-  return (
-    <>
-      {/* Canvas colore sagomato */}
-      <canvas ref={colorCanvasRef} width={width} height={height}
-        style={{ position:'absolute', top:0, left:0, zIndex:2, pointerEvents:'none' }} />
-      {/* Canvas ombre sopra il colore */}
-      <canvas ref={shadowCanvasRef} width={width} height={height}
-        style={{ position:'absolute', top:0, left:0, zIndex:3, pointerEvents:'none' }} />
-    </>
-  );
-}
+// ProductColorLayer rimosso — colore gestito con CSS overlay
 
 function DesignerApp() {
   const [product, setProduct] = useState('tshirt');
@@ -2609,26 +2522,30 @@ function DesignerApp() {
               flexShrink: 0,
             }}>
 
-            {/* ── Layer 1: sfondo bianco ── */}
+            {/* ── Sfondo colorato — colore prodotto selezionato ── */}
             <div style={{
               position:'absolute', top:0, left:0, width:400, height:svgH,
-              background:'#ffffff',
+              background: productColor || '#ffffff',
               boxShadow:'0 2px 16px rgba(0,0,0,0.10)',
               borderRadius:4,
               zIndex:1, pointerEvents:'none',
             }} />
 
-            {/* ── Layer 2: colore prodotto via canvas 2D + mockup come maschera ── */}
-            <ProductColorLayer
-              mockupUrl={currentProduct?.mockups?.[currentSideName]}
-              color={productColor}
-              width={400}
-              height={svgH}
-            />
-
-            {/* Layer 3 ombre gestite dentro ProductColorLayer */}
-            {!currentProduct?.mockups?.[currentSideName] && (
-              <div style={{ position:'absolute', top:0, left:0, width:400, height:svgH, zIndex:3, pointerEvents:'none' }}
+            {/* ── Mockup PNG sopra — multiply: bianco diventa trasparente, ombre visibili ── */}
+            {currentProduct?.mockups?.[currentSideName] ? (
+              <img
+                src={currentProduct.mockups[currentSideName]}
+                alt={currentSideName}
+                style={{
+                  position:'absolute', top:0, left:0,
+                  width:400, height:svgH,
+                  objectFit:'contain',
+                  zIndex:2, pointerEvents:'none',
+                  mixBlendMode:'multiply',
+                }}
+              />
+            ) : (
+              <div style={{ position:'absolute', top:0, left:0, width:400, height:svgH, zIndex:2, pointerEvents:'none' }}
                 dangerouslySetInnerHTML={{ __html: svgContent }} />
             )}
 
@@ -2637,7 +2554,7 @@ function DesignerApp() {
             <div id="print-zone-outline" style={{ position:'absolute', top:zone.top, left:zone.left,
               width:zone.width, height:zone.height,
               border:'1.5px dashed rgba(63,199,186,0.55)',
-              borderRadius:4, zIndex:5, pointerEvents:'none',
+              borderRadius:4, zIndex:4, pointerEvents:'none',
               background:'rgba(63,199,186,0.03)',
               transition:'opacity 0.2s' }}>
               <div style={{ position:'absolute', bottom:-16, left:0, fontSize:9, whiteSpace:'nowrap',
@@ -2650,7 +2567,7 @@ function DesignerApp() {
 
             {/* Fabric canvas */}
             <canvas id="main-canvas" style={{
-              position:'absolute', top:0, left:0, zIndex:4, width:400, height:svgH, background:'transparent',
+              position:'absolute', top:0, left:0, zIndex:3, width:400, height:svgH, background:'transparent',
             }} />
 
             {/* Preview mask — gestita fuori dallo stage per evitare problemi di scaling */}
