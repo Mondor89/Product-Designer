@@ -84,8 +84,8 @@ window.AdminStore = {
         sides:['Fronte','Retro','Sinistra','Destra'],
         // mockup PNG da GitHub (sfondo trasparente o bianco)
         mockups:{
-          Fronte:   'https://raw.githubusercontent.com/Mondor89/Product-Designer/main/mockups/tshirt/fronte.png',
-          Retro:    'https://raw.githubusercontent.com/Mondor89/Product-Designer/main/mockups/tshirt/retro.png',
+          Fronte:   '/mockups/tshirt/fronte.png',
+          Retro:    '/mockups/tshirt/retro.png',
           Sinistra: null,
           Destra:   null,
         },
@@ -99,8 +99,8 @@ window.AdminStore = {
         id:'felpa', name:'Felpa', icon:'🧥',
         sides:['Fronte','Retro','Sinistra','Destra'],
         mockups:{
-          Fronte:   'https://raw.githubusercontent.com/Mondor89/Product-Designer/main/mockups/felpa/fronte.png',
-          Retro:    'https://raw.githubusercontent.com/Mondor89/Product-Designer/main/mockups/felpa/retro.png',
+          Fronte:   '/mockups/felpa/fronte.png',
+          Retro:    '/mockups/felpa/retro.png',
           Sinistra: null,
           Destra:   null,
         },
@@ -112,8 +112,8 @@ window.AdminStore = {
         id:'hoodie', name:'Hoodie', icon:'🥷',
         sides:['Fronte','Retro','Sinistra','Destra'],
         mockups:{
-          Fronte:   'https://raw.githubusercontent.com/Mondor89/Product-Designer/main/mockups/hoodie/fronte.png',
-          Retro:    'https://raw.githubusercontent.com/Mondor89/Product-Designer/main/mockups/hoodie/retro.png',
+          Fronte:   '/mockups/hoodie/fronte.png',
+          Retro:    '/mockups/hoodie/retro.png',
           Sinistra: null,
           Destra:   null,
         },
@@ -125,8 +125,8 @@ window.AdminStore = {
         id:'manica_lunga', name:'Manica Lunga', icon:'🦺',
         sides:['Fronte','Retro','Sinistra','Destra'],
         mockups:{
-          Fronte:   'https://raw.githubusercontent.com/Mondor89/Product-Designer/main/mockups/manica_lunga/fronte.png',
-          Retro:    'https://raw.githubusercontent.com/Mondor89/Product-Designer/main/mockups/manica_lunga/retro.png',
+          Fronte:   '/mockups/manica_lunga/fronte.png',
+          Retro:    '/mockups/manica_lunga/retro.png',
           Sinistra: null,
           Destra:   null,
         },
@@ -138,8 +138,8 @@ window.AdminStore = {
         id:'vneck', name:'V-Neck', icon:'👔',
         sides:['Fronte','Retro','Sinistra','Destra'],
         mockups:{
-          Fronte:   'https://raw.githubusercontent.com/Mondor89/Product-Designer/main/mockups/vneck/fronte.png',
-          Retro:    'https://raw.githubusercontent.com/Mondor89/Product-Designer/main/mockups/vneck/retro.png',
+          Fronte:   '/mockups/vneck/fronte.png',
+          Retro:    '/mockups/vneck/retro.png',
           Sinistra: null,
           Destra:   null,
         },
@@ -1792,7 +1792,7 @@ function DesignerApp() {
           originX: 'left', originY: 'top',
           globalCompositeOperation: 'multiply',
         });
-      }, { crossOrigin: '' });
+      });
     } else {
       canvas.setOverlayImage(null, canvas.renderAll.bind(canvas));
     }
@@ -2911,7 +2911,7 @@ function MockupZoneEditor({ product, zone, onChange }) {
   const dragRef = useRef(null);
 
   // URL mockup costruito automaticamente dall'id prodotto
-  const GITHUB_BASE = 'https://raw.githubusercontent.com/Mondor89/Product-Designer/main/mockups/';
+  const GITHUB_BASE = '/mockups/';
   const mockupUrl = GITHUB_BASE + product.id + '/' + (previewSide === 'Fronte' ? 'fronte' : 'retro') + '.png';
 
   // Scala: PREVIEW_W px = productWidthCm cm
