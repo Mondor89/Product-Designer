@@ -1749,6 +1749,38 @@ function DesignerApp() {
   const [product, setProduct] = useState('tshirt');
   const [sideIndex, setSideIndex] = useState(0);
   const [productColor, setProductColor] = useState('#ffffff');
+
+  // ── Rect colorato nel canvas Fabric — tecnica identica a Lumise ──
+  // Quando productColor cambia, aggiorna il rect sotto tutti gli oggetti
+  useEffect(() => {
+    const canvas = window.DesignerCanvas;
+    if (!canvas) return;
+    // Cerca rect esistente
+    let rect = canvas.getObjects().find(o => o._isProductColor);
+    if (!rect) {
+      // Crea nuovo rect colorato non selezionabile
+      rect = new fabric.Rect({
+        width: canvas.width,
+        height: canvas.height,
+        left: canvas.width / 2,
+        top: canvas.height / 2,
+        originX: 'center',
+        originY: 'center',
+        fill: productColor,
+        selectable: false,
+        evented: false,
+        _isProductColor: true,
+      });
+      // Inserisce come primo oggetto (sotto tutto)
+      canvas.add(rect);
+      canvas.sendToBack(rect);
+    } else {
+      rect.set('fill', productColor);
+      canvas.sendToBack(rect);
+    }
+    canvas.renderAll();
+  }, [productColor, canvasReady]);
+
   const [canUndo, setCanUndo] = useState(false);
   const [canRedo, setCanRedo] = useState(false);
   const [showLayers, setShowLayers] = useState(false);
@@ -2516,42 +2548,31 @@ function DesignerApp() {
               flexShrink: 0,
             }}>
 
-            {/* ── Mockup PNG con cambio colore — tecnica isolation+multiply ── */}
-            {/* Il div con isolation crea un contesto blend separato dal canvas */}
+            {/* ── Sfondo bianco + mockup PNG sopra ── */}
+            {/* Il colore prodotto è gestito da fabric.Rect dentro il canvas Fabric (tecnica Lumise) */}
             <div style={{
               position:'absolute', top:0, left:0, width:400, height:svgH,
-              zIndex:1, pointerEvents:'none',
-              isolation:'isolate',
+              background:'#ffffff',
               boxShadow:'0 2px 16px rgba(0,0,0,0.10)',
               borderRadius:4,
-            }}>
-              {currentProduct?.mockups?.[currentSideName] ? (
-                <>
-                  {/* Sfondo colorato — visibile solo dove il PNG è trasparente/bianco */}
-                  <div style={{
-                    position:'absolute', inset:0,
-                    background: productColor || '#ffffff',
-                    borderRadius:4,
-                  }} />
-                  {/* PNG mockup con multiply — le zone scure (ombre) restano, il bianco diventa il colore */}
-                  <img
-                    src={currentProduct.mockups[currentSideName]}
-                    alt={currentSideName}
-                    style={{
-                      position:'absolute', top:0, left:0,
-                      width:'100%', height:'100%',
-                      objectFit:'contain',
-                      mixBlendMode:'multiply',
-                      display:'block',
-                    }}
-                  />
-                </>
-              ) : (
-                // Fallback SVG generato se mockup non disponibile
-                <div style={{ position:'absolute', top:0, left:0, width:'100%', height:'100%' }}
-                  dangerouslySetInnerHTML={{ __html: svgContent }} />
-              )}
-            </div>
+              zIndex:1, pointerEvents:'none',
+            }} />
+            {currentProduct?.mockups?.[currentSideName] ? (
+              <img
+                src={currentProduct.mockups[currentSideName]}
+                alt={currentSideName}
+                style={{
+                  position:'absolute', top:0, left:0,
+                  width:400, height:svgH,
+                  objectFit:'contain',
+                  zIndex:3, pointerEvents:'none',
+                  mixBlendMode:'multiply',
+                }}
+              />
+            ) : (
+              <div style={{ position:'absolute', top:0, left:0, width:400, height:svgH, zIndex:3, pointerEvents:'none' }}
+                dangerouslySetInnerHTML={{ __html: svgContent }} />
+            )}
 
             {/* Zona stampa tratteggiata */}
             {/* Zona tratteggiata — id per toggle DOM diretto senza re-render */}
