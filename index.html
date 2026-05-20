@@ -2096,7 +2096,7 @@ function DesignerApp() {
       const json = c.toJSON(['id']);
       setSideData((d) => ({ ...d, [currentSideKey]: json }));
       // Aggiorna zona globale per nuovi oggetti
-      const newZone = (PRODUCTS.find(p => p.id === newProduct)?.printZone) || zone;
+      const newZone = zone; // zona calcolata da printZoneCm in tempo reale
       window._designerZone = newZone;
       const nextKey = `${newProduct}_${newSide}`;
       const nextData = sideData[nextKey];
@@ -2880,7 +2880,7 @@ function ProductsTab({ toast }) {
   const save = (updated) => { const p = products.map(x => x.id===updated.id ? updated : x); setProducts(p); AdminStore.set('products', p); toast('Salvato!'); };
   const addColor = (p) => { if (!p.colors.includes(newColor)) save({...p, colors:[...p.colors, newColor]}); };
   const removeColor = (p, c) => save({...p, colors:p.colors.filter(x=>x!==c)});
-  const updateZone = (p, field, val) => save({...p, printZone:{...p.printZone, [field]: parseInt(val)||0}});
+  const updateZone = (p, field, val) => save({...p, printZoneCm:{...p.printZoneCm, [field]: parseFloat(val)||0}});
 
   return (
     <div>
@@ -2902,14 +2902,16 @@ function ProductsTab({ toast }) {
             <div style={{ animation:'fadeIn 0.15s ease' }}>
               <hr style={{ border:'none', borderTop:'1px solid #f0f0f0', marginBottom:14 }} />
 
-              {/* Print zone */}
+              {/* Print zone in CM */}
               <div style={{ marginBottom:14 }}>
-                <div style={{ fontWeight:600, fontSize:13, marginBottom:8, color:'#555' }}>Zona di Stampa (px)</div>
+                <div style={{ fontWeight:600, fontSize:13, marginBottom:8, color:'#555' }}>Zona di Stampa (cm)</div>
                 <div style={{ display:'grid', gridTemplateColumns:'repeat(4,1fr)', gap:8 }}>
-                  {['left','top','width','height'].map(f => (
+                  {[['x','LEFT'],['y','TOP'],['w','WIDTH'],['h','HEIGHT']].map(([f,lbl]) => (
                     <div key={f}>
-                      <label style={label}>{f}</label>
-                      <input type="number" value={p.printZone[f]} onChange={e => updateZone(p,f,e.target.value)} style={inp} />
+                      <label style={label}>{lbl}</label>
+                      <input type="number" step="0.5"
+                        value={(p.printZoneCm || {})[f] || 0}
+                        onChange={e => updateZone(p,f,e.target.value)} style={inp} />
                     </div>
                   ))}
                 </div>
