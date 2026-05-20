@@ -2516,40 +2516,42 @@ function DesignerApp() {
               flexShrink: 0,
             }}>
 
-            {/* ── Sfondo bianco + colore prodotto sovrapposto ── */}
+            {/* ── Mockup PNG con cambio colore — tecnica isolation+multiply ── */}
+            {/* Il div con isolation crea un contesto blend separato dal canvas */}
             <div style={{
               position:'absolute', top:0, left:0, width:400, height:svgH,
-              background:'#ffffff',
-              borderRadius:4,
-              boxShadow:'0 2px 16px rgba(0,0,0,0.10)',
-              zIndex:0, pointerEvents:'none'
-            }} />
-            {/* Rettangolo colorato — il colore selezionato appare sotto il mockup */}
-            <div style={{
-              position:'absolute', top:0, left:0, width:400, height:svgH,
-              background: productColor || '#ffffff',
               zIndex:1, pointerEvents:'none',
+              isolation:'isolate',
+              boxShadow:'0 2px 16px rgba(0,0,0,0.10)',
               borderRadius:4,
-            }} />
-
-            {/* ── Mockup PNG da GitHub — multiply per mostrare ombre sopra il colore ── */}
-            {currentProduct?.mockups?.[currentSideName] ? (
-              <img
-                src={currentProduct.mockups[currentSideName]}
-                alt={currentSideName}
-                style={{
-                  position:'absolute', top:0, left:0,
-                  width:400, height:svgH,
-                  objectFit:'contain',
-                  zIndex:2, pointerEvents:'none',
-                  mixBlendMode:'multiply'
-                }}
-              />
-            ) : (
-              // Fallback SVG generato se mockup non disponibile
-              <div style={{ position:'absolute', top:0, left:0, width:400, height:svgH, zIndex:2, pointerEvents:'none' }}
-                dangerouslySetInnerHTML={{ __html: svgContent }} />
-            )}
+            }}>
+              {currentProduct?.mockups?.[currentSideName] ? (
+                <>
+                  {/* Sfondo colorato — visibile solo dove il PNG è trasparente/bianco */}
+                  <div style={{
+                    position:'absolute', inset:0,
+                    background: productColor || '#ffffff',
+                    borderRadius:4,
+                  }} />
+                  {/* PNG mockup con multiply — le zone scure (ombre) restano, il bianco diventa il colore */}
+                  <img
+                    src={currentProduct.mockups[currentSideName]}
+                    alt={currentSideName}
+                    style={{
+                      position:'absolute', top:0, left:0,
+                      width:'100%', height:'100%',
+                      objectFit:'contain',
+                      mixBlendMode:'multiply',
+                      display:'block',
+                    }}
+                  />
+                </>
+              ) : (
+                // Fallback SVG generato se mockup non disponibile
+                <div style={{ position:'absolute', top:0, left:0, width:'100%', height:'100%' }}
+                  dangerouslySetInnerHTML={{ __html: svgContent }} />
+              )}
+            </div>
 
             {/* Zona stampa tratteggiata */}
             {/* Zona tratteggiata — id per toggle DOM diretto senza re-render */}
