@@ -1,0 +1,3250 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>WonderSpit – Product Designer</title>
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" crossorigin="anonymous"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/fabric.js/5.3.1/fabric.min.js"></script>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: 'Inter', sans-serif; background: #ebeced; height: 100vh; overflow: hidden; color: #2d3142; }
+  #root { height: 100vh; display: flex; flex-direction: column; }
+  ::-webkit-scrollbar { width: 5px; height: 5px; }
+  ::-webkit-scrollbar-track { background: #f1f1f1; }
+  ::-webkit-scrollbar-thumb { background: #ccc; border-radius: 3px; }
+  button { font-family: 'Inter', sans-serif; }
+  input, select, textarea { font-family: 'Inter', sans-serif; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  @keyframes fadeIn { from { opacity:0; transform:translateY(4px); } to { opacity:1; transform:translateY(0); } }
+  @keyframes slideIn { from { opacity:0; transform:translateX(-8px); } to { opacity:1; transform:translateX(0); } }
+  @keyframes drawerUp { from { transform:translateY(100%); } to { transform:translateY(0); } }
+  .canvas-wrapper canvas { display: block; }
+  .product-side-btn { transition: all 0.2s; }
+  .product-side-btn:hover { background: #e8faf9 !important; }
+  .panel-scroll::-webkit-scrollbar { width: 4px; }
+  .canvas-stage { touch-action: none; }
+  .colors-scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+  .colors-scroll::-webkit-scrollbar { height: 3px; }
+  .colors-scroll::-webkit-scrollbar-thumb { background: #3fc7ba; border-radius: 2px; }
+  #admin-root { min-height: 100vh; background: #f0f2f5; overflow-y: auto; height: 100vh; }
+</style>
+</head>
+<body>
+<div id="root" style="display:none"></div>
+<div id="admin-root" style="display:none"></div>
+
+<script type="text/babel">
+// APP CONTEXT — Bus, History, AdminStore, AIConfig
+// ═══════════════════════════════════════════════════════════════
+
+// AppContext.jsx — shared bus, history, AI config, admin store
+window.DesignerBus = {
+  _l: {},
+  on(e, cb) { (this._l[e] = this._l[e] || []).push(cb); },
+  off(e, cb) { this._l[e] = (this._l[e] || []).filter(l => l !== cb); },
+  emit(e, d) { (this._l[e] || []).forEach(cb => cb(d)); }
+};
+
+window.DesignerCanvas = null;
+
+window.DesignerHistory = {
+  stack: [], index: -1, saving: false,
+  save(canvas) {
+    if (this.saving) return;
+    const json = JSON.stringify(canvas.toJSON(['id']));
+    this.stack = this.stack.slice(0, this.index + 1);
+    this.stack.push(json);
+    if (this.stack.length > 40) this.stack.shift(); else this.index++;
+    DesignerBus.emit('historyChange', { canUndo: this.index > 0, canRedo: this.index < this.stack.length - 1 });
+  },
+  undo(canvas) { if (this.index <= 0) return; this.index--; this._restore(canvas); },
+  redo(canvas) { if (this.index >= this.stack.length - 1) return; this.index++; this._restore(canvas); },
+  _restore(canvas) {
+    this.saving = true;
+    canvas.loadFromJSON(JSON.parse(this.stack[this.index]), () => {
+      canvas.renderAll(); this.saving = false;
+      DesignerBus.emit('historyChange', { canUndo: this.index > 0, canRedo: this.index < this.stack.length - 1 });
+      DesignerBus.emit('selectionCleared');
+    });
+  }
+};
+
+// ── Shared admin store (localStorage) ───────────────────────────
+window.AdminStore = {
+  DEFAULTS: {
+    products: [
+      { id:'tshirt',   name:'T-Shirt',      icon:'👕', sides:['Fronte','Retro','Sinistra','Destra'], colors:['#ffffff','#000000','#e74c3c','#3498db','#2ecc71','#f39c12','#9b59b6'], printZone:{ left:135, top:115, width:130, height:160 } },
+      { id:'hoodie',   name:'Felpa',        icon:'🧥', sides:['Fronte','Retro','Sinistra','Destra'], colors:['#ffffff','#000000','#e74c3c','#2c3e50','#9b59b6'],                       printZone:{ left:135, top:120, width:130, height:160 } },
+      { id:'hoodie2',  name:'Hoodie',       icon:'🥷', sides:['Fronte','Retro','Sinistra','Destra'], colors:['#ffffff','#000000','#e74c3c','#2c3e50','#3498db','#9b59b6'],              printZone:{ left:135, top:120, width:130, height:160 } },
+      { id:'longsleeve', name:'Manica Lunga', icon:'🦺', sides:['Fronte','Retro'],                   colors:['#ffffff','#000000','#e74c3c','#3498db','#2ecc71','#2c3e50'],              printZone:{ left:135, top:115, width:130, height:160 } },
+      { id:'vneck',    name:'V-Neck',       icon:'👔', sides:['Fronte','Retro'],                     colors:['#ffffff','#000000','#e74c3c','#3498db','#2ecc71','#f39c12'],              printZone:{ left:135, top:115, width:130, height:160 } },
+    ],
+    cliparts: [
+      { id:'star',      svg:'<polygon points="12,2 15.09,8.26 22,9.27 17,14.14 18.18,21.02 12,17.77 5.82,21.02 7,14.14 2,9.27 8.91,8.26" fill="currentColor"/>', label:'Stella' },
+      { id:'heart',     svg:'<path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z" fill="currentColor"/>', label:'Cuore' },
+      { id:'lightning', svg:'<polygon points="13,2 4.5,13.5 11,13.5 11,22 19.5,10.5 13,10.5" fill="currentColor"/>', label:'Fulmine' },
+      { id:'diamond',   svg:'<polygon points="12,2 22,9 18,21 6,21 2,9" fill="currentColor"/>', label:'Diamante' },
+      { id:'crown',     svg:'<path d="M2 20h20v2H2zM4 18l4-8 4 4 4-8 4 8H4z" fill="currentColor"/>', label:'Corona' },
+      { id:'shield',    svg:'<path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" fill="currentColor"/>', label:'Scudo' },
+      { id:'anchor',    svg:'<circle cx="12" cy="6" r="3" fill="none" stroke="currentColor" stroke-width="2"/><line x1="12" y1="9" x2="12" y2="22" stroke="currentColor" stroke-width="2"/><path d="M5 15l7 7 7-7" fill="none" stroke="currentColor" stroke-width="2"/><line x1="5" y1="9" x2="19" y2="9" stroke="currentColor" stroke-width="2"/>', label:'Ancora' },
+      { id:'arrow',     svg:'<line x1="5" y1="12" x2="19" y2="12" stroke="currentColor" stroke-width="2"/><polyline points="12,5 19,12 12,19" fill="none" stroke="currentColor" stroke-width="2"/>', label:'Freccia' },
+      { id:'music',     svg:'<path d="M9 18V5l12-2v13" stroke="currentColor" stroke-width="2" fill="none"/><circle cx="6" cy="18" r="3" fill="currentColor"/><circle cx="18" cy="16" r="3" fill="currentColor"/>', label:'Musica' },
+      { id:'flower',    svg:'<circle cx="12" cy="12" r="3" fill="currentColor"/><circle cx="12" cy="6" r="3" fill="currentColor"/><circle cx="12" cy="18" r="3" fill="currentColor"/><circle cx="6" cy="12" r="3" fill="currentColor"/><circle cx="18" cy="12" r="3" fill="currentColor"/>', label:'Fiore' },
+    ],
+    templates: [
+      { id:'t1', name:'Sport',   bg:'#1a1a2e', texts:['TEAM NAME','#23'],     colors:['#e74c3c','#fff'] },
+      { id:'t2', name:'Minimal', bg:'#fff',    texts:['MINIMAL','EST. 2025'], colors:['#000','#3fc7ba'] },
+      { id:'t3', name:'Vintage', bg:'#f5e6c8', texts:['VINTAGE','ORIGINAL'],  colors:['#795548','#5d4037'] },
+      { id:'t4', name:'Neon',    bg:'#0d0d0d', texts:['NEON GLOW'],           colors:['#39ff14','#ff0099'] },
+    ],
+    fonts: ['Arial','Georgia','Times New Roman','Courier New','Verdana','Impact','Tahoma'],
+    aiConfig: { service:'pollinations', apiKey:'' },
+    imageSettings: { maxMB: 5, minKB: 10, degradeWarnScale: 2.5 },
+  },
+
+  _k(key) { return `wonderspit_${key}`; },
+
+  get(key) {
+    try {
+      const raw = localStorage.getItem(this._k(key));
+      return raw ? JSON.parse(raw) : JSON.parse(JSON.stringify(this.DEFAULTS[key]));
+    } catch { return JSON.parse(JSON.stringify(this.DEFAULTS[key])); }
+  },
+
+  set(key, val) {
+    try { localStorage.setItem(this._k(key), JSON.stringify(val)); } catch {}
+    DesignerBus.emit('adminStoreUpdate', { key, val });
+  },
+
+  reset(key) { localStorage.removeItem(this._k(key)); },
+};
+
+// Load AI config from admin store
+window.AIConfig = {
+  ...(AdminStore.get('aiConfig')),
+  services: {
+    pollinations: { name:'Pollinations.ai',  free:true,  placeholder:'Nessuna API key richiesta' },
+    openai:       { name:'OpenAI DALL·E 3',  free:false, placeholder:'sk-...' },
+    stability:    { name:'Stability AI',     free:false, placeholder:'sk-...' },
+    replicate:    { name:'Replicate',        free:false, placeholder:'r8_...' },
+  }
+};
+
+Object.assign(window, { DesignerBus, DesignerHistory, AdminStore, AIConfig });
+
+
+// ═══════════════════════════════════════════════════════════════
+</script>
+
+<script type="text/babel">
+// LEFT PANEL
+// ═══════════════════════════════════════════════════════════════
+
+// LeftPanel.jsx — flyout overlay sidebar v2
+const { useState: useSt, useRef: useRf, useEffect: useEff, useCallback: useCb } = React;
+
+const PALETTE = ['#000000','#ffffff','#e74c3c','#e67e22','#f1c40f','#2ecc71','#1abc9c','#3498db','#9b59b6','#e91e63','#ff5722','#607d8b','#795548','#9e9e9e','#3fc7ba','#2d3142'];
+
+const AI_STYLES = [
+  { id:'none',       label:'Nessuno',      icon:'○' },
+  { id:'realistic',  label:'Realistico',   icon:'📷' },
+  { id:'illustration',label:'Illustrazione',icon:'🎨' },
+  { id:'flat',       label:'Flat Design',  icon:'◼' },
+  { id:'vintage',    label:'Vintage',      icon:'📜' },
+  { id:'minimalist', label:'Minimalista',  icon:'—'  },
+  { id:'watercolor', label:'Acquerello',   icon:'💧' },
+  { id:'cartoon',    label:'Fumetto',      icon:'💬' },
+  { id:'pixelart',   label:'Pixel Art',    icon:'⚡' },
+  { id:'3d',         label:'3D Render',    icon:'🧊' },
+  { id:'sketch',     label:'Sketch',       icon:'✏️' },
+  { id:'neon',       label:'Neon/Glow',    icon:'💡' },
+];
+
+const STYLE_PROMPTS = {
+  realistic:'realistic photo, ultra detailed, high resolution,',
+  illustration:'digital illustration, vector art, colorful,',
+  flat:'flat design, simple shapes, no shadows, minimal,',
+  vintage:'vintage retro style, aged, distressed, old poster,',
+  minimalist:'minimalist, simple, clean white background, few elements,',
+  watercolor:'watercolor painting, soft edges, artistic,',
+  cartoon:'cartoon style, comic book, bold outlines,',
+  pixelart:'pixel art, 8-bit style, retro game graphics,',
+  '3d':'3D render, Blender, cinema 4D, photorealistic, subsurface scattering,',
+  sketch:'pencil sketch, hand drawn, black and white, rough lines,',
+  neon:'neon glow, dark background, vibrant colors, cyberpunk,',
+};
+
+/* ── PRODOTTO PANEL ──────────────────────────────────────────── */
+function ProdottoPanel({ products, currentProduct, onProductChange }) {
+  const [quantities, setQuantities] = useSt(() => Object.fromEntries(['XS','S','M','L','XL','XXL','XXXL'].map(s => [s, 0])));
+  const prod = products.find(p => p.id === currentProduct) || products[0];
+  const SIZES = ['XS','S','M','L','XL','XXL','XXXL'];
+
+  const setQty = (size, val) => setQuantities(q => ({ ...q, [size]: Math.max(0, Math.min(999, parseInt(val) || 0)) }));
+  const adj = (s, d) => setQty(s, quantities[s] + d);
+  const total = Object.values(quantities).reduce((a, b) => a + b, 0);
+
+  return (
+    <div style={lp.panel}>
+      <div style={lp.sectionTitle}>Tipo Prodotto</div>
+      <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:6, marginBottom:16 }}>
+        {products.map(p => (
+          <div key={p.id} onClick={() => onProductChange(p.id)}
+            style={{ ...lp.productCard, ...(currentProduct===p.id ? lp.productCardActive : {}) }}>
+            <span style={{ fontSize:22 }}>{p.icon}</span>
+            <span style={{ fontSize:11, marginTop:3, fontWeight:currentProduct===p.id?600:400 }}>{p.name}</span>
+          </div>
+        ))}
+      </div>
+
+      <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:8 }}>
+        <div style={lp.sectionTitle}>Taglie &amp; Quantità</div>
+        {total > 0 && <span style={{ fontSize:11, color:'#3fc7ba', fontWeight:700 }}>Tot: {total} pz</span>}
+      </div>
+      <div style={{ display:'flex', flexDirection:'column', gap:5 }}>
+        {SIZES.map(size => (
+          <div key={size} style={{ display:'flex', alignItems:'center', gap:6 }}>
+            <span style={{ width:32, fontSize:12, fontWeight:600, color:'#555' }}>{size}</span>
+            <div style={{ display:'flex', alignItems:'center', border:'1px solid #e0e0e0', borderRadius:6, overflow:'hidden', flex:1 }}>
+              <button onClick={() => adj(size,-1)} style={lp.qtyBtn}>–</button>
+              <input type="number" min={0} max={999} value={quantities[size]}
+                onChange={e => setQty(size, e.target.value)}
+                style={{ flex:1, border:'none', textAlign:'center', fontSize:13, fontFamily:'inherit',
+                  background:quantities[size]>0?'#f0faf9':'#fff', outline:'none', height:30 }} />
+              <button onClick={() => adj(size,+1)} style={lp.qtyBtn}>+</button>
+            </div>
+          </div>
+        ))}
+      </div>
+      {total > 0 && (
+        <div style={{ marginTop:12, padding:'8px 12px', background:'#f0faf9', borderRadius:8, border:'1px solid rgba(63,199,186,0.3)', fontSize:12 }}>
+          🛒 <strong>{total} pezzi</strong> selezionati
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ── AI PANEL v2 ─────────────────────────────────────────────── */
+function AIPanel({ onAdd }) {
+  const [prompt, setPrompt] = useSt('');
+  const [style, setStyle] = useSt('none');
+  const [loading, setLoading] = useSt(false);
+  const [results, setResults] = useSt([]);
+  const [selected, setSelected] = useSt(null);       // index of kept image
+  const [error, setError] = useSt('');
+  const [refImage, setRefImage] = useSt(null);       // reference image data URL
+  const refInputRef = useRf();
+  const svcInfo = AdminStore.get('aiConfig');
+
+  const buildPrompt = () => {
+    const stylePrefix = STYLE_PROMPTS[style] || '';
+    const refNote = refImage ? ', similar style to reference image,' : '';
+    return `${stylePrefix}${refNote} ${prompt}, high quality, transparent background`.trim();
+  };
+
+  const generate = async () => {
+    if (!prompt.trim()) return;
+    setLoading(true); setError(''); setResults([]); setSelected(null);
+    const cfg = AdminStore.get('aiConfig');
+    const fullPrompt = buildPrompt();
+    try {
+      if (cfg.service === 'pollinations') {
+        setResults(Array.from({ length:4 }, (_,i) =>
+          `https://image.pollinations.ai/prompt/${encodeURIComponent(fullPrompt)}?width=768&height=768&seed=${Date.now()+i*1000}&nologo=true&enhance=true`
+        ));
+      } else if (cfg.service === 'openai') {
+        if (!cfg.apiKey) throw new Error('API key OpenAI mancante nel pannello admin');
+        const res = await fetch('https://api.openai.com/v1/images/generations', {
+          method:'POST', headers:{ Authorization:`Bearer ${cfg.apiKey}`, 'Content-Type':'application/json' },
+          body: JSON.stringify({ model:'dall-e-3', prompt:fullPrompt, n:1, size:'1024x1024' })
+        });
+        const d = await res.json(); if (d.error) throw new Error(d.error.message);
+        setResults(d.data.map(x => x.url));
+      } else if (cfg.service === 'stability') {
+        if (!cfg.apiKey) throw new Error('API key Stability AI mancante nel pannello admin');
+        const res = await fetch('https://api.stability.ai/v1/generation/stable-diffusion-xl-1024-v1-0/text-to-image', {
+          method:'POST', headers:{ Authorization:`Bearer ${cfg.apiKey}`, 'Content-Type':'application/json', Accept:'application/json' },
+          body: JSON.stringify({ text_prompts:[{text:fullPrompt}], samples:4, width:1024, height:1024 })
+        });
+        const d = await res.json(); if (d.message) throw new Error(d.message);
+        setResults(d.artifacts.map(a => `data:image/png;base64,${a.base64}`));
+      }
+    } catch(e) { setError(e.message || 'Errore generazione'); }
+    setLoading(false);
+  };
+
+  const regenerateFrom = () => {
+    if (selected === null) return;
+    // Keep the selected as reference and regenerate
+    setRefImage(results[selected]);
+    setResults([]); setSelected(null);
+    generate();
+  };
+
+  const handleRefFile = (file) => {
+    if (!file?.type.startsWith('image/')) return;
+    const r = new FileReader(); r.onload = e => setRefImage(e.target.result); r.readAsDataURL(file);
+  };
+
+  return (
+    <div style={lp.panel}>
+      <div style={{ display:'flex', alignItems:'center', gap:6, marginBottom:10, padding:'6px 10px',
+        background:'linear-gradient(135deg,rgba(108,99,255,0.08),rgba(63,199,186,0.08))', borderRadius:8 }}>
+        <span style={{ fontSize:18 }}>✨</span>
+        <div>
+          <div style={{ fontWeight:700, fontSize:13 }}>AI Image Generator</div>
+          <div style={{ fontSize:10, color:'#3fc7ba' }}>{AdminStore.get('aiConfig').service === 'pollinations' ? 'Pollinations.ai · Gratuito' : AdminStore.get('aiConfig').service}</div>
+        </div>
+        <div style={{ marginLeft:'auto', fontSize:10, color:'#aaa', textAlign:'right', lineHeight:1.3 }}>API configurabile<br/>nel pannello admin</div>
+      </div>
+
+      {/* Prompt */}
+      <label style={lp.label}>Descrizione immagine</label>
+      <textarea value={prompt} onChange={e => setPrompt(e.target.value)} rows={3}
+        placeholder="Descrivi l'immagine che vuoi generare..."
+        style={{ ...lp.input, resize:'vertical', marginBottom:10 }} />
+
+      {/* Style filters */}
+      <label style={lp.label}>Stile</label>
+      <div style={{ display:'grid', gridTemplateColumns:'repeat(3,1fr)', gap:5, marginBottom:12 }}>
+        {AI_STYLES.map(s => (
+          <button key={s.id} onClick={() => setStyle(s.id)}
+            style={{ padding:'5px 4px', border:`1px solid ${style===s.id?'#6c63ff':'#e0e0e0'}`,
+              borderRadius:6, background:style===s.id?'rgba(108,99,255,0.1)':'#fafafa',
+              cursor:'pointer', fontSize:10, fontFamily:'inherit', color:style===s.id?'#6c63ff':'#555',
+              fontWeight:style===s.id?700:400, display:'flex', flexDirection:'column', alignItems:'center', gap:2 }}>
+            <span>{s.icon}</span><span>{s.label}</span>
+          </button>
+        ))}
+      </div>
+
+      {/* Reference image */}
+      <label style={lp.label}>Immagine di riferimento (opzionale)</label>
+      <div style={{ display:'flex', gap:8, alignItems:'center', marginBottom:12 }}>
+        <div onClick={() => refInputRef.current.click()}
+          style={{ width:52, height:52, border:'1.5px dashed #ddd', borderRadius:8, cursor:'pointer',
+            display:'flex', alignItems:'center', justifyContent:'center', overflow:'hidden', flexShrink:0,
+            background:'#fafafa' }}>
+          {refImage
+            ? <img src={refImage} style={{ width:'100%', height:'100%', objectFit:'cover' }} />
+            : <span style={{ fontSize:20, color:'#ccc' }}>+</span>}
+        </div>
+        <div style={{ flex:1, fontSize:11, color:'#888', lineHeight:1.5 }}>
+          Carica un'immagine per guidare lo stile della generazione
+          {refImage && <button onClick={() => setRefImage(null)}
+            style={{ display:'block', marginTop:4, background:'none', border:'none', color:'#e74c3c', cursor:'pointer', fontSize:11, padding:0 }}>
+            Rimuovi riferimento
+          </button>}
+        </div>
+        <input ref={refInputRef} type="file" accept="image/*" style={{ display:'none' }}
+          onChange={e => handleRefFile(e.target.files[0])} />
+      </div>
+
+      <button onClick={generate} disabled={loading || !prompt.trim()}
+        style={{ ...lp.primaryBtn, background:loading?'#aaa':'linear-gradient(135deg,#6c63ff,#3fc7ba)', marginBottom:12 }}>
+        {loading ? '⏳ Generazione in corso...' : '✨ Genera Immagine'}
+      </button>
+
+      {error && <div style={{ background:'#fde8e8', color:'#c0392b', borderRadius:6, padding:10, fontSize:12, marginBottom:8 }}>{error}</div>}
+
+      {results.length > 0 && (
+        <div>
+          <div style={{ fontSize:11, color:'#555', marginBottom:6, fontWeight:600 }}>
+            Seleziona la migliore — poi puoi usarla come base per rigenerare:
+          </div>
+          <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:6 }}>
+            {results.map((src, i) => (
+              <div key={i}
+                style={{ borderRadius:8, overflow:'hidden', cursor:'pointer', position:'relative',
+                  border:`2.5px solid ${selected===i?'#3fc7ba':'transparent'}`, transition:'border 0.15s' }}
+                onClick={() => setSelected(selected===i ? null : i)}>
+                <img src={src} alt="" style={{ width:'100%', aspectRatio:'1/1', objectFit:'cover', display:'block' }}
+                  onError={e => { e.target.parentElement.style.display='none'; }} />
+                {selected === i && (
+                  <div style={{ position:'absolute', top:4, right:4, background:'#3fc7ba', color:'#fff',
+                    borderRadius:'50%', width:20, height:20, display:'flex', alignItems:'center', justifyContent:'center', fontSize:12 }}>✓</div>
+                )}
+                <div style={{ position:'absolute', inset:0, background:'rgba(63,199,186,0)', transition:'background 0.15s',
+                  display:'flex', alignItems:'flex-end', justifyContent:'center', paddingBottom:6 }}
+                  onMouseEnter={e => e.currentTarget.style.background='rgba(63,199,186,0.15)'}
+                  onMouseLeave={e => e.currentTarget.style.background='rgba(63,199,186,0)'}>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          {/* Action buttons */}
+          <div style={{ display:'flex', gap:6, marginTop:10 }}>
+            {selected !== null && (
+              <>
+                <button onClick={() => onAdd({ type:'image', src:results[selected] })}
+                  style={{ ...lp.primaryBtn, flex:2, fontSize:12 }}>
+                  + Aggiungi al design
+                </button>
+                <button onClick={regenerateFrom}
+                  style={{ ...lp.primaryBtn, flex:1, fontSize:11, background:'linear-gradient(135deg,#6c63ff,#9b59b6)' }}>
+                  🔄 Ritenta
+                </button>
+              </>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ── TEXT PANEL ──────────────────────────────────────────────── */
+function TextPanel({ onAdd }) {
+  const [inputText, setInputText] = useSt('');
+  const [color, setColor] = useSt('#000000');
+  const [font, setFont] = useSt('Arial');
+  const [effect, setEffect] = useSt('normal');
+  const [fonts, setFonts] = useSt(() => AdminStore.get('fonts'));
+
+  useEff(() => {
+    const h = ({ key }) => { if (key === 'fonts') setFonts(AdminStore.get('fonts')); };
+    DesignerBus.on('adminStoreUpdate', h);
+    fonts.forEach(f => {
+      const sys = ['Arial','Georgia','Times New Roman','Courier New','Verdana','Impact','Tahoma','Comic Sans MS','Trebuchet MS','Palatino'];
+      if (!sys.includes(f)) {
+        const id = `gfont-${f.replace(/ /g,'-')}`;
+        if (!document.getElementById(id)) {
+          const link = document.createElement('link');
+          link.id = id; link.rel = 'stylesheet';
+          link.href = `https://fonts.googleapis.com/css2?family=${f.replace(/ /g,'+')}:wght@400;700&display=swap`;
+          document.head.appendChild(link);
+        }
+      }
+    });
+    return () => DesignerBus.off('adminStoreUpdate', h);
+  }, [fonts]);
+
+  const addText = (fontName) => {
+    const txt = inputText.trim() || 'Il tuo testo';
+    const isBold   = effect === 'bold';
+    const isItalic = effect === 'italic';
+    const isCurved = effect === 'curved';
+    const isArch   = false; // Arch rimosso
+    const isOblique= effect === 'oblique';
+    onAdd({
+      type: 'text', text: txt,
+      font: fontName || font,
+      size: 36, color,
+      bold: isBold, italic: isItalic || isOblique,
+      align: 'center',
+      effect: isCurved ? 'curved' : 'normal',
+      skewX: isOblique ? 15 : 0,
+      placeholder: false,
+    });
+  };
+
+  const previewText = inputText.trim() || 'Il tuo testo';
+
+  // Effetti — ogni bottone mostra il NOME dell'effetto nello stile corrispondente
+  const EFFECTS = [
+    {
+      id:'normal', label:'Normal',
+      render: () => (
+        <span style={{ fontSize:16, color:'#fff', fontWeight:'normal', fontFamily:'inherit' }}>Normal</span>
+      )
+    },
+    {
+      id:'bold', label:'Bold',
+      render: () => (
+        <span style={{ fontSize:16, color:'#fff', fontWeight:800, fontFamily:'inherit' }}>Bold</span>
+      )
+    },
+    {
+      id:'italic', label:'Italic',
+      render: () => (
+        <span style={{ fontSize:16, color:'#fff', fontStyle:'italic', fontFamily:'inherit' }}>Italic</span>
+      )
+    },
+    {
+      id:'oblique', label:'Oblique',
+      render: () => (
+        <span style={{ fontSize:14, color:'#fff', fontStyle:'italic',
+          transform:'skewX(-14deg)', display:'inline-block', fontFamily:'inherit' }}>Oblique</span>
+      )
+    },
+    {
+      id:'curved', label:'Curved',
+      render: () => (
+        <svg viewBox="0 0 90 38" style={{ width:90, height:38 }}>
+          <defs><path id="crv" d="M 5,32 Q 45,4 85,32"/></defs>
+          <text fill="#fff" fontSize="14" fontFamily="inherit" fontWeight="600">
+            <textPath href="#crv" startOffset="50%" textAnchor="middle">Curved</textPath>
+          </text>
+        </svg>
+      )
+    },
+  ];
+
+  return (
+    <div style={lp.panel}>
+
+      {/* ── Campo testo ──────────────────────────── */}
+      <label style={{ ...lp.label, marginBottom:6, display:'block' }}>✏️ Testo</label>
+      <textarea value={inputText} onChange={e => setInputText(e.target.value)}
+        placeholder="Scrivi qui il tuo testo..."
+        rows={2}
+        style={{ width:'100%', boxSizing:'border-box', padding:'9px 11px',
+          borderRadius:8, border:'1.5px solid rgba(63,199,186,0.35)',
+          fontSize:14, fontFamily:'inherit', resize:'none', outline:'none',
+          color:'#2d3142', background:'#f8fffe', marginBottom:12 }}
+        onFocus={e => e.target.style.border='1.5px solid #3fc7ba'}
+        onBlur={e => e.target.style.border='1.5px solid rgba(63,199,186,0.35)'} />
+
+      {/* ── Colore + Font tendina ─────────────────── */}
+      <div style={{ display:'flex', gap:8, marginBottom:12, alignItems:'flex-end' }}>
+        <div>
+          <label style={{ ...lp.label, marginBottom:4, display:'block' }}>Colore</label>
+          <input type="color" value={color} onChange={e => setColor(e.target.value)}
+            style={{ width:36, height:32, borderRadius:6, border:'1.5px solid #e0e0e0',
+              cursor:'pointer', padding:1 }} />
+        </div>
+        <div style={{ flex:1 }}>
+          <label style={{ ...lp.label, marginBottom:4, display:'block' }}>Font</label>
+          <select value={font} onChange={e => setFont(e.target.value)}
+            style={{ ...lp.select, width:'100%', fontFamily:font, marginBottom:0 }}>
+            {fonts.map(f => <option key={f} value={f} style={{ fontFamily:f }}>{f}</option>)}
+          </select>
+        </div>
+      </div>
+
+      {/* ── Effetti stile Lumise — sfondo scuro, testo nella forma dell'effetto ── */}
+      <label style={{ ...lp.label, marginBottom:6, display:'block' }}>Stile</label>
+      <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:6, marginBottom:14 }}>
+        {EFFECTS.map(ef => {
+          const sel = effect === ef.id;
+          return (
+            <div key={ef.id} onClick={() => setEffect(ef.id)}
+              style={{
+                background: sel ? '#1a1f35' : '#2d3142',
+                border: `2px solid ${sel ? '#3fc7ba' : 'transparent'}`,
+                borderRadius:10, padding:'12px 8px', cursor:'pointer',
+                textAlign:'center', transition:'all 0.15s',
+                display:'flex', alignItems:'center', justifyContent:'center',
+                minHeight:52, overflow:'hidden',
+                boxShadow: sel ? '0 0 0 1px #3fc7ba' : 'none',
+              }}
+              onMouseEnter={e => { if (!sel) e.currentTarget.style.background='#3a4060'; }}
+              onMouseLeave={e => { if (!sel) e.currentTarget.style.background='#2d3142'; }}>
+              {ef.render()}
+            </div>
+          );
+        })}
+      </div>
+
+      {/* ── Anteprima testo — sfondo chiaro, colore e font scelti ─── */}
+      <div style={{ background:'#f8f9fa', border:'1.5px solid #e0e0e0',
+        borderRadius:10, padding:'14px 12px', marginBottom:12,
+        textAlign:'center', minHeight:56, display:'flex', alignItems:'center', justifyContent:'center' }}>
+        {effect === 'curved' ? (
+          <svg viewBox="0 0 200 60" style={{ width:'100%', height:60 }}>
+            <defs><path id="prev-crv" d="M 10,52 Q 100,8 190,52"/></defs>
+            <text fill={color} fontSize="20" fontFamily={font} fontWeight={effect==='bold'?'800':'normal'}>
+              <textPath href="#prev-crv" startOffset="50%" textAnchor="middle">{previewText}</textPath>
+            </text>
+          </svg>
+        ) : (
+          <span style={{ fontFamily:font, fontSize:22, color:color, wordBreak:'break-word',
+            fontWeight: effect==='bold' ? 800 : 'normal',
+            fontStyle: (effect==='italic'||effect==='oblique') ? 'italic' : 'normal',
+            transform: effect==='oblique' ? 'skewX(-12deg)' : 'none',
+            display:'inline-block' }}>
+            {previewText}
+          </span>
+        )}
+      </div>
+
+      {/* ── Bottone aggiungi testo ────────────────── */}
+      <button onClick={() => addText(font)}
+        style={{ width:'100%', padding:'11px', borderRadius:8,
+          background:'linear-gradient(135deg,#3fc7ba,#2db5a8)',
+          border:'none', color:'#fff', fontWeight:700, fontSize:14,
+          fontFamily:'inherit', cursor:'pointer' }}>
+        + Aggiungi testo
+      </button>
+    </div>
+  );
+}
+
+
+function UploadPanel({ onAdd }) {
+  const fileRef = useRf();
+  const [dragging, setDragging] = useSt(false);
+  const [error, setError] = useSt('');
+  const imgSettings = AdminStore.get('imageSettings');
+
+  const handle = (file) => {
+    if (!file?.type.startsWith('image/')) return;
+    const maxBytes = imgSettings.maxMB * 1024 * 1024;
+    const minBytes = imgSettings.minKB * 1024;
+    if (file.size > maxBytes) { setError(`File troppo grande! Max: ${imgSettings.maxMB} MB`); return; }
+    if (file.size < minBytes) { setError(`File troppo piccolo! Min: ${imgSettings.minKB} KB`); return; }
+    setError('');
+    const r = new FileReader();
+    r.onload = e => onAdd({ type:'image', src:e.target.result, fileName:file.name, fileSize:file.size });
+    r.readAsDataURL(file);
+  };
+
+  return (
+    <div style={lp.panel}>
+      <div onDragOver={e => { e.preventDefault(); setDragging(true); }}
+        onDragLeave={() => setDragging(false)}
+        onDrop={e => { e.preventDefault(); setDragging(false); handle(e.dataTransfer.files[0]); }}
+        onClick={() => fileRef.current.click()}
+        style={{ ...lp.dropzone, ...(dragging?lp.dropzoneActive:{}) }}>
+        <div style={{ fontSize:34, marginBottom:6 }}>🖼️</div>
+        <div style={{ fontWeight:600, color:'#3fc7ba' }}>Carica immagine</div>
+        <div style={{ fontSize:11, color:'#999', marginTop:3 }}>JPG, PNG, SVG, GIF</div>
+        <div style={{ fontSize:10, color:'#bbb', marginTop:2 }}>Max {imgSettings.maxMB}MB · Min {imgSettings.minKB}KB</div>
+      </div>
+      <input ref={fileRef} type="file" accept="image/*" style={{ display:'none' }}
+        onChange={e => handle(e.target.files[0])} />
+      {error && <div style={{ background:'#fde8e8', color:'#c0392b', borderRadius:6, padding:8, fontSize:12, marginTop:8 }}>{error}</div>}
+    </div>
+  );
+}
+
+/* ── CLIPART PANEL ───────────────────────────────────────────── */
+function ClipartPanel({ onAdd }) {
+  const [q, setQ] = useSt('');
+  const [cliparts, setCliparts] = useSt(() => AdminStore.get('cliparts'));
+
+  useEff(() => {
+    const h = ({ key }) => { if (key === 'cliparts') setCliparts(AdminStore.get('cliparts')); };
+    DesignerBus.on('adminStoreUpdate', h);
+    return () => DesignerBus.off('adminStoreUpdate', h);
+  }, []);
+
+  const filtered = cliparts.filter(c => c.label.toLowerCase().includes(q.toLowerCase()));
+  return (
+    <div style={lp.panel}>
+      <input placeholder="Cerca clipart..." value={q} onChange={e => setQ(e.target.value)} style={{ ...lp.input, marginBottom:10 }} />
+      <div style={{ display:'grid', gridTemplateColumns:'repeat(3,1fr)', gap:7 }}>
+        {filtered.map(c => (
+          <div key={c.id} onClick={() => onAdd({ type:'clipart', svg:c.svg })}
+            style={lp.clipCard}
+            onMouseEnter={e => { e.currentTarget.style.borderColor='#3fc7ba'; e.currentTarget.style.background='#f0faf9'; }}
+            onMouseLeave={e => { e.currentTarget.style.borderColor='#eee'; e.currentTarget.style.background='#fafafa'; }}>
+            <svg viewBox="0 0 24 24" width={34} height={34} style={{ color:'#3fc7ba' }} dangerouslySetInnerHTML={{ __html:c.svg }} />
+            <div style={{ fontSize:10, color:'#666', marginTop:3 }}>{c.label}</div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+/* ── SHAPES PANEL ────────────────────────────────────────────── */
+function ShapesPanel({ onAdd }) {
+  const [fill, setFill] = useSt('#3fc7ba');
+  const [stroke, setStroke] = useSt('transparent');
+  const [sw, setSw] = useSt(0);
+  const shapes = [['rect','Rettangolo','⬛'],['rounded-rect','Arrotondato','▬'],['circle','Cerchio','🔵'],['triangle','Triangolo','🔺'],['line','Linea','➖']];
+  return (
+    <div style={lp.panel}>
+      <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:8, marginBottom:10 }}>
+        <div><label style={lp.label}>Riempimento</label>
+          <input type="color" value={fill} onChange={e => setFill(e.target.value)} style={{ ...lp.input, padding:2, height:36 }} /></div>
+        <div><label style={lp.label}>Bordo</label>
+          <input type="color" value={stroke==='transparent'?'#000000':stroke} onChange={e => setStroke(e.target.value)}
+            style={{ ...lp.input, padding:2, height:36 }} /></div>
+      </div>
+      <label style={lp.label}>Spessore bordo: {sw}px</label>
+      <input type="range" min={0} max={20} value={sw} onChange={e => setSw(+e.target.value)} style={{ width:'100%', marginBottom:12 }} />
+      <div style={{ display:'grid', gridTemplateColumns:'repeat(3,1fr)', gap:7 }}>
+        {shapes.map(([id,label,icon]) => (
+          <div key={id} onClick={() => onAdd({ type:'shape', shape:id, fill, stroke, strokeWidth:sw })}
+            style={lp.clipCard}
+            onMouseEnter={e => { e.currentTarget.style.borderColor='#3fc7ba'; e.currentTarget.style.background='#f0faf9'; }}
+            onMouseLeave={e => { e.currentTarget.style.borderColor='#eee'; e.currentTarget.style.background='#fafafa'; }}>
+            <span style={{ fontSize:26 }}>{icon}</span>
+            <div style={{ fontSize:10, color:'#666', marginTop:3 }}>{label}</div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+/* ── TEMPLATES PANEL ─────────────────────────────────────────── */
+function TemplatesPanel({ onAdd }) {
+  const [templates, setTemplates] = useSt(() => AdminStore.get('templates'));
+
+  useEff(() => {
+    const h = ({ key }) => { if (key === 'templates') setTemplates(AdminStore.get('templates')); };
+    DesignerBus.on('adminStoreUpdate', h);
+    return () => DesignerBus.off('adminStoreUpdate', h);
+  }, []);
+
+  return (
+    <div style={lp.panel}>
+      <div style={{ fontSize:11, color:'#999', marginBottom:10 }}>Scegli un template come punto di partenza:</div>
+      <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:8 }}>
+        {templates.map(t => (
+          <div key={t.id} onClick={() => onAdd({ type:'template', template:t })}
+            style={{ background:t.bg, padding:12, borderRadius:8, border:'2px solid #e0e0e0', cursor:'pointer', minHeight:72, position:'relative' }}
+            onMouseEnter={e => e.currentTarget.style.borderColor='#3fc7ba'}
+            onMouseLeave={e => e.currentTarget.style.borderColor='#e0e0e0'}>
+            {t.texts.map((txt,i) => (
+              <div key={i} style={{ color:t.colors[i%t.colors.length], fontWeight:'bold', fontSize:i===0?12:9, marginBottom:2 }}>{txt}</div>
+            ))}
+            <div style={{ position:'absolute', bottom:4, right:6, fontSize:9, opacity:0.5, color:t.colors[0] }}>{t.name}</div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+/* ── TABS ────────────────────────────────────────────────────── */
+const TABS = [
+  { id:'prodotto',  label:'Prodotto',  icon:'📦' },
+  { id:'ai',        label:'AI',        icon:'✨' },
+  { id:'text',      label:'Testo',     icon:'𝐓'  },
+  { id:'upload',    label:'Upload',    icon:'↑'  },
+  { id:'clipart',   label:'Clipart',   icon:'★'  },
+  { id:'shapes',    label:'Forme',     icon:'◼'  },
+  { id:'templates', label:'Template',  icon:'⊞'  },
+];
+
+/* ── MAIN LEFT PANEL ─────────────────────────────────────────── */
+function LeftPanel({ onAddElement, products, currentProduct, onProductChange }) {
+  const [activeTab, setActiveTabRaw] = useSt(null);
+  const panelRef = useRf();
+
+  const setActiveTab = id => setActiveTabRaw(prev => prev===id ? null : id);
+  const tab = TABS.find(t => t.id === activeTab);
+
+  useEff(() => {
+    const h = e => {
+      if (panelRef.current && !panelRef.current.contains(e.target)) setActiveTabRaw(null);
+    };
+    document.addEventListener('mousedown', h);
+    return () => document.removeEventListener('mousedown', h);
+  }, []);
+
+  return (
+    <div ref={panelRef} style={{ position:'relative', display:'flex', height:'100%', zIndex:50 }}>
+      {/* Icon column */}
+      <div style={{ width:56, background:'#2d3142', display:'flex', flexDirection:'column', alignItems:'center', paddingTop:8, gap:2, flexShrink:0 }}>
+        {TABS.map(t => (
+          <button key={t.id} onClick={() => setActiveTab(t.id)} title={t.label}
+            style={{ width:46, padding:'8px 4px', background:activeTab===t.id?'rgba(63,199,186,0.18)':'none',
+              border:'none', cursor:'pointer', color:activeTab===t.id?'#3fc7ba':'#8892b0',
+              display:'flex', flexDirection:'column', alignItems:'center', borderRadius:6,
+              transition:'all 0.15s', borderLeft:activeTab===t.id?'3px solid #3fc7ba':'3px solid transparent' }}>
+            <span style={{ fontSize:t.id==='text'?16:14 }}>{t.icon}</span>
+            <span style={{ fontSize:8, marginTop:2 }}>{t.label}</span>
+          </button>
+        ))}
+        {/* Admin link */}
+        <div style={{ marginTop:'auto', paddingBottom:10 }}>
+          <a href="#admin" title="Pannello Admin"
+            style={{ display:'flex', flexDirection:'column', alignItems:'center', color:'#4a5270',
+              textDecoration:'none', padding:'6px 4px', borderRadius:6, transition:'color 0.15s' }}
+            onMouseEnter={e => e.currentTarget.style.color='#8892b0'}
+            onMouseLeave={e => e.currentTarget.style.color='#4a5270'}>
+            <span style={{ fontSize:14 }}>⚙</span>
+            <span style={{ fontSize:7, marginTop:1 }}>Admin</span>
+          </a>
+        </div>
+      </div>
+
+      {/* Flyout */}
+      {activeTab && (
+        <div style={{ position:'absolute', left:56, top:0, width:270, height:'100%', background:'#fff',
+          boxShadow:'4px 0 20px rgba(0,0,0,0.12)', display:'flex', flexDirection:'column',
+          animation:'slideIn 0.15s ease', overflow:'hidden' }}
+          onClick={e => e.stopPropagation()}>
+          <div style={{ padding:'10px 14px', borderBottom:'1px solid #f0f0f0', display:'flex', alignItems:'center', justifyContent:'space-between', flexShrink:0 }}>
+            <div style={{ fontWeight:700, fontSize:13, color:'#2d3142', display:'flex', alignItems:'center', gap:7 }}>
+              <span style={{ fontSize:15 }}>{tab?.icon}</span> {tab?.label}
+            </div>
+            <button onClick={() => setActiveTabRaw(null)}
+              style={{ background:'none', border:'none', cursor:'pointer', color:'#bbb', fontSize:16 }}>✕</button>
+          </div>
+          <div style={{ flex:1, overflowY:'auto' }}>
+            {activeTab==='prodotto'  && <ProdottoPanel products={products} currentProduct={currentProduct} onProductChange={id => { onProductChange(id); setActiveTabRaw(null); }} />}
+            {activeTab==='ai'        && <AIPanel onAdd={onAddElement} />}
+            {activeTab==='text'      && <TextPanel onAdd={onAddElement} />}
+            {activeTab==='upload'    && <UploadPanel onAdd={onAddElement} />}
+            {activeTab==='clipart'   && <ClipartPanel onAdd={onAddElement} />}
+            {activeTab==='shapes'    && <ShapesPanel onAdd={onAddElement} />}
+            {activeTab==='templates' && <TemplatesPanel onAdd={onAddElement} />}
+          </div>
+        </div>
+      )}
+      <style>{`@keyframes slideIn{from{opacity:0;transform:translateX(-8px)}to{opacity:1;transform:translateX(0)}}`}</style>
+    </div>
+  );
+}
+
+const lp = {
+  panel:{ padding:14 },
+  sectionTitle:{ fontSize:11, fontWeight:700, color:'#888', textTransform:'uppercase', letterSpacing:0.5, marginBottom:7 },
+  label:{ display:'block', fontSize:10, fontWeight:700, color:'#888', textTransform:'uppercase', letterSpacing:0.4, marginBottom:3 },
+  input:{ width:'100%', padding:'7px 10px', border:'1px solid #e0e0e0', borderRadius:6, fontSize:13, fontFamily:'inherit', background:'#fafafa', boxSizing:'border-box', outline:'none' },
+  select:{ width:'100%', padding:'7px 10px', border:'1px solid #e0e0e0', borderRadius:6, fontSize:13, fontFamily:'inherit', background:'#fafafa', boxSizing:'border-box' },
+  primaryBtn:{ width:'100%', padding:'10px', background:'linear-gradient(135deg,#3fc7ba,#2db5a8)', color:'#fff', border:'none', borderRadius:8, cursor:'pointer', fontWeight:700, fontSize:13, fontFamily:'inherit' },
+  toggleBtn:{ padding:'6px 8px', border:'1px solid #ddd', borderRadius:5, background:'#f5f5f5', cursor:'pointer', fontSize:13, fontFamily:'inherit', transition:'all 0.12s' },
+  toggleOn:{ background:'#3fc7ba', color:'#fff', border:'1px solid #3fc7ba' },
+  dropzone:{ border:'2px dashed #ccc', borderRadius:10, padding:'28px 16px', textAlign:'center', cursor:'pointer', transition:'all 0.2s' },
+  dropzoneActive:{ border:'2px dashed #3fc7ba', background:'#f0faf9' },
+  clipCard:{ display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', padding:8, border:'1px solid #eee', borderRadius:7, cursor:'pointer', background:'#fafafa', transition:'all 0.12s' },
+  productCard:{ display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', padding:'10px 6px', border:'1.5px solid #e0e0e0', borderRadius:8, cursor:'pointer', background:'#fafafa', transition:'all 0.15s' },
+  productCardActive:{ border:'1.5px solid #3fc7ba', background:'#f0faf9', color:'#3fc7ba' },
+  qtyBtn:{ width:26, border:'none', background:'#f5f5f5', cursor:'pointer', fontSize:14, color:'#555', padding:0, height:30 },
+};
+
+Object.assign(window, { LeftPanel });
+
+
+// ═══════════════════════════════════════════════════════════════
+// RIGHT PANEL
+// ═══════════════════════════════════════════════════════════════
+
+// BottomToolbar.jsx — barra contestuale in basso, sostituisce RightPanel
+// Appare solo quando un oggetto è selezionato sul canvas
+const { useState: useStateR, useEffect: useEffectR } = React;
+
+function BottomToolbar() {
+  const [selected, setSelected] = useStateR(null);
+  const [props, setProps] = useStateR({});
+  const [fonts, setFonts] = useStateR(() => AdminStore.get('fonts'));
+
+  useEffectR(() => {
+    const onSel = (obj) => {
+      setSelected(obj);
+      if (!obj) { setProps({}); return; }
+      setProps({
+        opacity:     Math.round((obj.opacity || 1) * 100),
+        fill:        obj.fill || '#000000',
+        stroke:      obj.stroke || 'transparent',
+        fontSize:    Math.round((obj.fontSize || 24) * (obj.scaleX || 1)),
+        fontFamily:  obj.fontFamily || 'Arial',
+        fontWeight:  obj.fontWeight || 'normal',
+        fontStyle:   obj.fontStyle  || 'normal',
+        flipX:       obj.flipX || false,
+        flipY:       obj.flipY || false,
+        radius:      obj.radius || 45,
+        spacing:     obj.spacing || 1,
+        charSpacing: obj.charSpacing || 0,
+      });
+    };
+    const onClear = () => { setSelected(null); setProps({}); };
+    const onFonts = ({ key }) => { if (key === 'fonts') setFonts(AdminStore.get('fonts')); };
+
+    const onModified = () => {
+      const canvas = window.DesignerCanvas;
+      if (!canvas) return;
+      const obj = canvas.getActiveObject();
+      if (!obj) return;
+      if (obj.type === 'i-text' || obj.type === 'text' || obj.type === 'curved-text') {
+        setProps(p => ({ ...p, fontSize: Math.round((obj.fontSize || 24) * (obj.scaleX || 1)) }));
+      }
+      setProps(p => ({ ...p, opacity: Math.round((obj.opacity || 1) * 100) }));
+    };
+
+    const attachListeners = () => {
+      if (window.DesignerCanvas) {
+        window.DesignerCanvas.on('object:modified', onModified);
+        window.DesignerCanvas.on('object:scaling',  onModified);
+        window.DesignerCanvas.on('object:rotating', onModified);
+      }
+    };
+    attachListeners();
+    const retryTimer = setTimeout(attachListeners, 500);
+
+    DesignerBus.on('selectionCreated', onSel);
+    DesignerBus.on('selectionUpdated', onSel);
+    DesignerBus.on('selectionCleared', onClear);
+    DesignerBus.on('adminStoreUpdate', onFonts);
+
+    return () => {
+      clearTimeout(retryTimer);
+      DesignerBus.off('selectionCreated', onSel);
+      DesignerBus.off('selectionUpdated', onSel);
+      DesignerBus.off('selectionCleared', onClear);
+      DesignerBus.off('adminStoreUpdate', onFonts);
+      if (window.DesignerCanvas) {
+        window.DesignerCanvas.off('object:modified', onModified);
+        window.DesignerCanvas.off('object:scaling',  onModified);
+        window.DesignerCanvas.off('object:rotating', onModified);
+      }
+    };
+  }, []);
+
+  const apply = (key, value) => {
+    const canvas = window.DesignerCanvas;
+    if (!canvas) return;
+    const obj = canvas.getActiveObject();
+    if (!obj) return;
+    if (key === 'opacity') obj.set('opacity', value / 100);
+    else obj.set(key, value);
+    // CurvedText custom: forza ricalcolo bounds e dirty flag
+    if (obj.type === 'curved-text') {
+      obj.dirty = true;
+      if (typeof obj._calcBounds === 'function') obj._calcBounds();
+      obj.setCoords();
+    }
+    canvas.renderAll();
+    DesignerHistory.save(canvas);
+    setProps(p => ({ ...p, [key]: value }));
+  };
+
+  const layerUp = () => {
+    const c = window.DesignerCanvas;
+    if (!c) return;
+    const obj = c.getActiveObject();
+    if (!obj) return;
+    c.bringForward(obj, true);
+    c.renderAll();
+    DesignerHistory.save(c);
+  };
+  const layerDown = () => {
+    const c = window.DesignerCanvas;
+    if (!c) return;
+    const obj = c.getActiveObject();
+    if (!obj) return;
+    c.sendBackwards(obj, true);
+    c.renderAll();
+    DesignerHistory.save(c);
+  };
+
+  const isText  = selected && (selected.type === 'i-text' || selected.type === 'text' || selected.type === 'curved-text');
+  const isImg   = selected && selected.type === 'image';
+  const isShape = selected && !isText && !isImg;
+
+  if (!selected) return null;
+
+  const isMob = window.innerWidth < 768;
+  const botOffset = isMob ? 110 : 48;
+
+  // Stile comune per ogni gruppo di controlli
+  const grp = { display:'flex', flexDirection:'column', alignItems:'center', gap:isMob?1:3, flexShrink:0 };
+  const lbl = { fontSize: isMob?8:9, color:'rgba(255,255,255,0.38)', textTransform:'uppercase',
+    letterSpacing:0.5, fontFamily:'inherit', whiteSpace:'nowrap' };
+  const sep = { width:1, alignSelf:'stretch', background:'rgba(255,255,255,0.1)', margin:'0 2px', flexShrink:0 };
+  const btn = (active) => ({
+    background: active ? 'rgba(63,199,186,0.2)' : 'rgba(255,255,255,0.07)',
+    border: `1px solid ${active ? '#3fc7ba' : 'rgba(255,255,255,0.12)'}`,
+    color: active ? '#3fc7ba' : '#bbb',
+    borderRadius:6, padding:'4px 8px', cursor:'pointer',
+    fontSize:12, fontFamily:'inherit', flexShrink:0, lineHeight:1.4,
+  });
+  const inputNum = {
+    background:'rgba(255,255,255,0.07)', border:'1px solid rgba(255,255,255,0.12)',
+    color:'#fff', borderRadius:6, padding: isMob?'3px 0':'4px 0', fontSize: isMob?12:13,
+    width: isMob?38:44, textAlign:'center', fontFamily:'inherit', outline:'none',
+  };
+  const inputColor = {
+    width:26, height:26, borderRadius:5,
+    border:'2px solid rgba(255,255,255,0.18)', cursor:'pointer', padding:1, flexShrink:0,
+  };
+  const sel = {
+    background:'rgba(255,255,255,0.07)', border:'1px solid rgba(255,255,255,0.12)',
+    color:'#ccc', borderRadius:6, padding: isMob?'3px 3px':'4px 5px', fontSize: isMob?10:11,
+    fontFamily:'inherit', cursor:'pointer', maxWidth: isMob?70:90, flexShrink:0,
+  };
+  const sliderStyle = { width: isMob?50:70, accentColor:'#3fc7ba', cursor:'pointer' };
+
+  return (
+    <div style={{
+      position:'fixed',
+      bottom: botOffset,
+      left: isMob ? 0 : 'calc(50% + 28px)',
+      right: isMob ? 0 : 'auto',
+      transform: isMob ? 'none' : 'translateX(-50%)',
+      background:'rgba(22,26,42,0.97)',
+      borderRadius: isMob ? '12px 12px 0 0' : 12,
+      padding: isMob ? '6px 10px' : '8px 14px',
+      display:'flex', alignItems:'center',
+      gap: isMob ? 6 : 8,
+      zIndex:150,
+      boxShadow:'0 -2px 20px rgba(0,0,0,0.3)',
+      backdropFilter:'blur(12px)',
+      flexWrap: isMob ? 'nowrap' : 'wrap',
+      overflowX: isMob ? 'auto' : 'visible',
+      maxWidth: isMob ? '100vw' : 'calc(100vw - 120px)',
+      boxSizing:'border-box',
+    }}>
+
+      {/* ── TESTO ─────────────────────────────── */}
+      {isText && <>
+        {/* Font — per tutti i tipi di testo */}
+        <div style={grp}>
+          <span style={lbl}>Font</span>
+          <select value={props.fontFamily||'Arial'} onChange={e => apply('fontFamily', e.target.value)} style={sel}>
+            {fonts.map(f => <option key={f} value={f} style={{ fontFamily:f }}>{f}</option>)}
+          </select>
+        </div>
+
+        {/* Grandezza */}
+        <div style={grp}>
+          <span style={lbl}>Dim</span>
+          <input type="number" min={6} max={200} value={props.fontSize||24}
+            onChange={e => apply('fontSize', +e.target.value)} style={inputNum} />
+        </div>
+
+        {/* Curvatura — solo curved text */}
+        {selected.type === 'curved-text' && (
+          <div style={grp}>
+            <span style={lbl}>Curva</span>
+            <input type="range" min={20} max={120}
+              value={props.radius||45}
+              onChange={e => {
+                const v = +e.target.value;
+                const canvas = window.DesignerCanvas;
+                if (canvas) {
+                  const obj = canvas.getActiveObject();
+                  if (obj) {
+                    obj.radius = v;
+                    obj.dirty = true;
+                    if (typeof obj._calcBounds === 'function') obj._calcBounds();
+                    obj.setCoords();
+                    canvas.renderAll();
+                    DesignerHistory.save(canvas);
+                  }
+                }
+                setProps(p => ({ ...p, radius: v }));
+              }}
+              style={{ ...sliderStyle, width:60 }} />
+          </div>
+        )}
+
+        {/* Spaziatura — per tutti */}
+        <div style={grp}>
+          <span style={lbl}>Spazio</span>
+          <input type="range" min={0} max={20}
+            value={selected.type === 'curved-text'
+              ? Math.round(((props.spacing||1) - 1) * 10)
+              : Math.round((props.charSpacing||0) / 10)}
+            onChange={e => {
+              const v = +e.target.value;
+              const canvas = window.DesignerCanvas;
+              if (!canvas) return;
+              const obj = canvas.getActiveObject();
+              if (!obj) return;
+              if (selected.type === 'curved-text') {
+                const sp = 1 + v / 10;
+                obj.spacing = sp;
+                obj.dirty = true;
+                canvas.renderAll();
+                DesignerHistory.save(canvas);
+                setProps(p => ({ ...p, spacing: sp }));
+              } else {
+                obj.set('charSpacing', v * 10);
+                canvas.renderAll();
+                DesignerHistory.save(canvas);
+                setProps(p => ({ ...p, charSpacing: v * 10 }));
+              }
+            }}
+            style={{ ...sliderStyle, width:60 }} />
+        </div>
+
+        {/* Colore */}
+        <div style={grp}>
+          <span style={lbl}>Colore</span>
+          <input type="color" value={props.fill&&props.fill!=='transparent'?props.fill:'#000000'}
+            onChange={e => apply('fill', e.target.value)} style={inputColor} />
+        </div>
+
+        {/* B / I */}
+        <div style={grp}>
+          <span style={lbl}>Stile</span>
+          <div style={{ display:'flex', gap:3 }}>
+            <button onClick={() => apply('fontWeight', props.fontWeight==='bold'?'normal':'bold')}
+              style={{ ...btn(props.fontWeight==='bold'), fontWeight:'bold', minWidth:28 }}>B</button>
+            <button onClick={() => apply('fontStyle', props.fontStyle==='italic'?'normal':'italic')}
+              style={{ ...btn(props.fontStyle==='italic'), fontStyle:'italic', minWidth:28 }}>I</button>
+          </div>
+        </div>
+
+        <div style={sep} />
+      </>}
+
+      {/* ── IMMAGINE ──────────────────────────── */}
+      {isImg && <>
+        <div style={grp}>
+          <span style={lbl}>Flip</span>
+          <div style={{ display:'flex', gap:3 }}>
+            <button onClick={() => apply('flipX', !props.flipX)} style={btn(props.flipX)}>↔</button>
+            <button onClick={() => apply('flipY', !props.flipY)} style={btn(props.flipY)}>↕</button>
+          </div>
+        </div>
+        <div style={sep} />
+      </>}
+
+      {/* ── FORMA ─────────────────────────────── */}
+      {isShape && <>
+        <div style={grp}>
+          <span style={lbl}>Riempimento</span>
+          <input type="color"
+            value={props.fill&&props.fill!=='transparent'?props.fill:'#3fc7ba'}
+            onChange={e => apply('fill', e.target.value)} style={inputColor} />
+        </div>
+        <div style={grp}>
+          <span style={lbl}>Bordo</span>
+          <input type="color"
+            value={props.stroke&&props.stroke!=='transparent'?props.stroke:'#000000'}
+            onChange={e => apply('stroke', e.target.value)} style={inputColor} />
+        </div>
+        <div style={sep} />
+      </>}
+
+      {/* ── LAYER — per tutti ─────────────────── */}
+      <div style={grp}>
+        <span style={lbl}>Layer</span>
+        <div style={{ display:'flex', gap:3 }}>
+          <button onClick={layerUp}   style={btn(false)} title="Porta avanti">↑</button>
+          <button onClick={layerDown} style={btn(false)} title="Porta indietro">↓</button>
+        </div>
+      </div>
+
+      {/* ── OPACITÀ — per tutti ───────────────── */}
+      <div style={grp}>
+        <span style={lbl}>Opacità {props.opacity||100}%</span>
+        <input type="range" min={0} max={100} value={props.opacity||100}
+          onChange={e => apply('opacity', +e.target.value)} style={sliderStyle} />
+      </div>
+
+    </div>
+  );
+}
+
+
+// Mantieni RightPanel come alias vuoto per compatibilità (non renderizza nulla)
+function RightPanel() { return null; }
+
+const rightStyles = {
+  panel: {}, header: {}, emptyState: {}, label: {}, input: {}, select: {},
+  iconBtn: {}, toggleBtn: {}, toggleBtnOn: {}, layerBtn: {},
+};
+
+Object.assign(window, { BottomToolbar, RightPanel });
+
+
+// ═══════════════════════════════════════════════════════════════
+</script>
+
+<script type="text/babel">
+// PRODUCT DESIGNER APP
+// ═══════════════════════════════════════════════════════════════
+
+
+const { useState, useEffect, useRef, useCallback } = React;
+
+// ─── Product definitions (from AdminStore) ─────────────────────
+const PRODUCTS = AdminStore.get('products');
+
+
+// ─── Product SVG mockups ────────────────────────────────────────
+const PRODUCT_SVGS = {
+  tshirt: (color) => `
+    <svg viewBox="0 0 400 440" xmlns="http://www.w3.org/2000/svg">
+      <defs>
+        <filter id="shadow"><feDropShadow dx="0" dy="4" stdDeviation="6" flood-opacity="0.15"/></filter>
+        <linearGradient id="shirtGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+          <stop offset="0%" style="stop-color:${color};stop-opacity:1"/>
+          <stop offset="100%" style="stop-color:${adjustColor(color, -20)};stop-opacity:1"/>
+        </linearGradient>
+      </defs>
+      <g filter="url(#shadow)">
+        <path d="M140,20 L100,30 L40,75 L20,140 L70,155 L70,400 L330,400 L330,155 L380,140 L360,75 L300,30 L260,20 C245,45 215,58 200,58 C185,58 155,45 140,20 Z"
+          fill="url(#shirtGrad)" stroke="${adjustColor(color, -35)}" stroke-width="1.5"/>
+        <path d="M140,20 C145,35 165,58 200,58 C235,58 255,35 260,20" fill="none" stroke="${adjustColor(color, -35)}" stroke-width="1.5"/>
+        <!-- sleeves shading -->
+        <path d="M40,75 L20,140 L70,155 L100,75 Z" fill="${adjustColor(color, -10)}" opacity="0.4"/>
+        <path d="M360,75 L380,140 L330,155 L300,75 Z" fill="${adjustColor(color, -10)}" opacity="0.4"/>
+        <!-- body shading -->
+        <path d="M70,155 L70,400 L100,400 L100,155 Z" fill="${adjustColor(color, -12)}" opacity="0.25"/>
+        <path d="M300,155 L300,400 L330,400 L330,155 Z" fill="${adjustColor(color, -12)}" opacity="0.25"/>
+      </g>
+    </svg>`,
+  mug: (color) => `
+    <svg viewBox="0 0 400 440" xmlns="http://www.w3.org/2000/svg">
+      <defs>
+        <filter id="shadow"><feDropShadow dx="0" dy="4" stdDeviation="6" flood-opacity="0.15"/></filter>
+        <linearGradient id="mugGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+          <stop offset="0%" style="stop-color:${adjustColor(color, -20)};stop-opacity:1"/>
+          <stop offset="40%" style="stop-color:${color};stop-opacity:1"/>
+          <stop offset="100%" style="stop-color:${adjustColor(color, -30)};stop-opacity:1"/>
+        </linearGradient>
+      </defs>
+      <g filter="url(#shadow)">
+        <rect x="80" y="120" width="240" height="200" rx="12" fill="url(#mugGrad)" stroke="${adjustColor(color, -40)}" stroke-width="1.5"/>
+        <ellipse cx="200" cy="120" rx="120" ry="20" fill="${adjustColor(color, 15)}" stroke="${adjustColor(color, -40)}" stroke-width="1.5"/>
+        <ellipse cx="200" cy="320" rx="120" ry="18" fill="${adjustColor(color, -25)}" stroke="${adjustColor(color, -40)}" stroke-width="1.5"/>
+        <path d="M320,160 Q370,160 370,200 Q370,240 320,240" fill="none" stroke="${adjustColor(color, -40)}" stroke-width="14" stroke-linecap="round"/>
+        <path d="M80,140 L80,300 Q80,320 100,320 L100,140 Z" fill="white" opacity="0.12"/>
+      </g>
+    </svg>`,
+  hoodie: (color) => `
+    <svg viewBox="0 0 400 460" xmlns="http://www.w3.org/2000/svg">
+      <defs>
+        <filter id="shadow"><feDropShadow dx="0" dy="4" stdDeviation="6" flood-opacity="0.15"/></filter>
+        <linearGradient id="hoodieGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+          <stop offset="0%" style="stop-color:${color};stop-opacity:1"/>
+          <stop offset="100%" style="stop-color:${adjustColor(color, -25)};stop-opacity:1"/>
+        </linearGradient>
+      </defs>
+      <g filter="url(#shadow)">
+        <path d="M140,30 L100,45 L35,90 L15,160 L70,178 L70,420 L330,420 L330,178 L385,160 L365,90 L300,45 L260,30 C248,60 228,75 200,75 C172,75 152,60 140,30 Z"
+          fill="url(#hoodieGrad)" stroke="${adjustColor(color, -35)}" stroke-width="1.5"/>
+        <path d="M140,30 C150,55 172,75 200,75 C228,75 250,55 260,30 L255,28 C240,52 218,70 200,70 C182,70 160,52 145,28 Z" fill="${adjustColor(color, -20)}"/>
+        <path d="M185,75 L185,180 L215,180 L215,75" fill="${adjustColor(color, -15)}" opacity="0.5"/>
+        <rect x="170" y="175" width="60" height="10" rx="5" fill="${adjustColor(color, -25)}"/>
+        <path d="M35,90 L15,160 L70,178 L100,90 Z" fill="${adjustColor(color, -15)}" opacity="0.35"/>
+        <path d="M365,90 L385,160 L330,178 L300,90 Z" fill="${adjustColor(color, -15)}" opacity="0.35"/>
+      </g>
+    </svg>`,
+  cap: (color) => `
+    <svg viewBox="0 0 400 320" xmlns="http://www.w3.org/2000/svg">
+      <defs>
+        <filter id="shadow"><feDropShadow dx="0" dy="4" stdDeviation="6" flood-opacity="0.15"/></filter>
+        <linearGradient id="capGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+          <stop offset="0%" style="stop-color:${color};stop-opacity:1"/>
+          <stop offset="100%" style="stop-color:${adjustColor(color, -30)};stop-opacity:1"/>
+        </linearGradient>
+      </defs>
+      <g filter="url(#shadow)">
+        <ellipse cx="200" cy="220" rx="180" ry="30" fill="${adjustColor(color, -20)}" stroke="${adjustColor(color, -40)}" stroke-width="1"/>
+        <path d="M60,200 Q60,60 200,50 Q340,60 340,200 Z" fill="url(#capGrad)" stroke="${adjustColor(color, -35)}" stroke-width="1.5"/>
+        <rect x="30" y="210" width="200" height="18" rx="9" fill="${adjustColor(color, -30)}" stroke="${adjustColor(color, -45)}" stroke-width="1"/>
+        <path d="M195,50 L205,50 L205,90 L195,90 Z" fill="${adjustColor(color, -20)}"/>
+      </g>
+    </svg>`,
+  bag: (color) => `
+    <svg viewBox="0 0 400 460" xmlns="http://www.w3.org/2000/svg">
+      <defs>
+        <filter id="shadow"><feDropShadow dx="0" dy="4" stdDeviation="6" flood-opacity="0.15"/></filter>
+        <linearGradient id="bagGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+          <stop offset="0%" style="stop-color:${color};stop-opacity:1"/>
+          <stop offset="100%" style="stop-color:${adjustColor(color, -25)};stop-opacity:1"/>
+        </linearGradient>
+      </defs>
+      <g filter="url(#shadow)">
+        <rect x="80" y="130" width="240" height="280" rx="16" fill="url(#bagGrad)" stroke="${adjustColor(color, -40)}" stroke-width="1.5"/>
+        <path d="M150,130 Q150,70 200,70 Q250,70 250,130" fill="none" stroke="${adjustColor(color, -40)}" stroke-width="14" stroke-linecap="round"/>
+        <rect x="80" y="130" width="240" height="28" rx="8" fill="${adjustColor(color, -15)}" opacity="0.5"/>
+        <line x1="200" y1="158" x2="200" y2="410" stroke="${adjustColor(color, -20)}" stroke-width="1.5" opacity="0.4"/>
+        <path d="M80,180 L320,180" stroke="${adjustColor(color, -20)}" stroke-width="1" opacity="0.3"/>
+      </g>
+    </svg>`
+};
+
+// SVG Hoodie con cappuccio visibile (diverso da felpa)
+PRODUCT_SVGS.hoodie2 = (color) => `
+  <svg viewBox="0 0 400 460" xmlns="http://www.w3.org/2000/svg">
+    <defs>
+      <filter id="shadow2"><feDropShadow dx="0" dy="4" stdDeviation="6" flood-opacity="0.15"/></filter>
+      <linearGradient id="hoodie2Grad" x1="0%" y1="0%" x2="100%" y2="100%">
+        <stop offset="0%" style="stop-color:${color};stop-opacity:1"/>
+        <stop offset="100%" style="stop-color:${adjustColor2(color, -25)};stop-opacity:1"/>
+      </linearGradient>
+    </defs>
+    <g filter="url(#shadow2)">
+      <!-- corpo -->
+      <path d="M140,50 L100,65 L35,110 L15,180 L70,198 L70,420 L330,420 L330,198 L385,180 L365,110 L300,65 L260,50 C248,80 228,95 200,95 C172,95 152,80 140,50 Z"
+        fill="url(#hoodie2Grad)" stroke="${adjustColor2(color, -35)}" stroke-width="1.5"/>
+      <!-- cappuccio grande -->
+      <path d="M140,50 C135,20 150,5 200,5 C250,5 265,20 260,50 C248,80 228,95 200,95 C172,95 152,80 140,50 Z"
+        fill="${adjustColor2(color, -10)}" stroke="${adjustColor2(color, -35)}" stroke-width="1.5"/>
+      <!-- cordino cappuccio -->
+      <line x1="188" y1="95" x2="182" y2="190" stroke="${adjustColor2(color, -30)}" stroke-width="3" stroke-linecap="round"/>
+      <line x1="212" y1="95" x2="218" y2="190" stroke="${adjustColor2(color, -30)}" stroke-width="3" stroke-linecap="round"/>
+      <circle cx="182" cy="193" r="5" fill="${adjustColor2(color, -30)}"/>
+      <circle cx="218" cy="193" r="5" fill="${adjustColor2(color, -30)}"/>
+      <!-- tasca canguro -->
+      <path d="M155,280 Q155,340 200,340 Q245,340 245,280" fill="none" stroke="${adjustColor2(color, -25)}" stroke-width="2"/>
+      <!-- maniche -->
+      <path d="M35,110 L15,180 L70,198 L100,110 Z" fill="${adjustColor2(color, -15)}" opacity="0.35"/>
+      <path d="M365,110 L385,180 L330,198 L300,110 Z" fill="${adjustColor2(color, -15)}" opacity="0.35"/>
+    </g>
+  </svg>`;
+
+// SVG Manica Lunga (t-shirt con maniche lunghe fino al polso)
+PRODUCT_SVGS.longsleeve = (color) => `
+  <svg viewBox="0 0 400 500" xmlns="http://www.w3.org/2000/svg">
+    <defs>
+      <filter id="shadowls"><feDropShadow dx="0" dy="4" stdDeviation="6" flood-opacity="0.15"/></filter>
+      <linearGradient id="lsGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+        <stop offset="0%" style="stop-color:${color};stop-opacity:1"/>
+        <stop offset="100%" style="stop-color:${adjustColor2(color, -20)};stop-opacity:1"/>
+      </linearGradient>
+    </defs>
+    <g filter="url(#shadowls)">
+      <!-- corpo -->
+      <path d="M145,22 L105,32 L20,130 L5,300 L70,305 L70,430 L330,430 L330,305 L395,300 L380,130 L295,32 L255,22 C240,47 215,60 200,60 C185,60 160,47 145,22 Z"
+        fill="url(#lsGrad)" stroke="${adjustColor2(color, -35)}" stroke-width="1.5"/>
+      <!-- collo -->
+      <path d="M145,22 C150,37 170,60 200,60 C230,60 250,37 255,22" fill="none" stroke="${adjustColor2(color, -35)}" stroke-width="1.5"/>
+      <!-- manica sx lunga -->
+      <path d="M20,130 L5,300 L70,305 L105,32 Z" fill="${adjustColor2(color, -10)}" opacity="0.4"/>
+      <!-- manica dx lunga -->
+      <path d="M380,130 L395,300 L330,305 L295,32 Z" fill="${adjustColor2(color, -10)}" opacity="0.4"/>
+      <!-- polsini -->
+      <rect x="3" y="295" width="70" height="15" rx="5" fill="${adjustColor2(color, -20)}"/>
+      <rect x="327" y="295" width="70" height="15" rx="5" fill="${adjustColor2(color, -20)}"/>
+      <!-- fianchi -->
+      <path d="M70,305 L70,430 L100,430 L100,305 Z" fill="${adjustColor2(color, -12)}" opacity="0.25"/>
+      <path d="M300,305 L300,430 L330,430 L330,305 Z" fill="${adjustColor2(color, -12)}" opacity="0.25"/>
+    </g>
+  </svg>`;
+
+// SVG V-Neck (t-shirt con scollo a V)
+PRODUCT_SVGS.vneck = (color) => `
+  <svg viewBox="0 0 400 440" xmlns="http://www.w3.org/2000/svg">
+    <defs>
+      <filter id="shadowvn"><feDropShadow dx="0" dy="4" stdDeviation="6" flood-opacity="0.15"/></filter>
+      <linearGradient id="vnGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+        <stop offset="0%" style="stop-color:${color};stop-opacity:1"/>
+        <stop offset="100%" style="stop-color:${adjustColor2(color, -20)};stop-opacity:1"/>
+      </linearGradient>
+    </defs>
+    <g filter="url(#shadowvn)">
+      <!-- corpo con scollo V -->
+      <path d="M140,20 L100,30 L40,75 L20,140 L70,155 L70,400 L330,400 L330,155 L380,140 L360,75 L300,30 L260,20 L200,75 L140,20 Z"
+        fill="url(#vnGrad)" stroke="${adjustColor2(color, -35)}" stroke-width="1.5"/>
+      <!-- scollo V visibile -->
+      <path d="M140,20 L200,75 L260,20" fill="none" stroke="${adjustColor2(color, -35)}" stroke-width="2"/>
+      <!-- maniche shading -->
+      <path d="M40,75 L20,140 L70,155 L100,75 Z" fill="${adjustColor2(color, -10)}" opacity="0.4"/>
+      <path d="M360,75 L380,140 L330,155 L300,75 Z" fill="${adjustColor2(color, -10)}" opacity="0.4"/>
+      <!-- corpo shading -->
+      <path d="M70,155 L70,400 L100,400 L100,155 Z" fill="${adjustColor2(color, -12)}" opacity="0.25"/>
+      <path d="M300,155 L300,400 L330,400 L330,155 Z" fill="${adjustColor2(color, -12)}" opacity="0.25"/>
+    </g>
+  </svg>`;
+
+// Alias adjustColor per SVG inline (stessa funzione, serve prima della dichiarazione principale)
+function adjustColor2(hex, amount) { return adjustColor(hex, amount); }
+
+function adjustColor(hex, amount) {
+  const c = hex.replace('#', '');
+  const num = parseInt(c.length === 3 ? c.split('').map((x) => x + x).join('') : c, 16);
+  const r = Math.min(255, Math.max(0, (num >> 16) + amount));
+  const g = Math.min(255, Math.max(0, (num >> 8 & 0xff) + amount));
+  const b = Math.min(255, Math.max(0, (num & 0xff) + amount));
+  return `#${[r, g, b].map((v) => v.toString(16).padStart(2, '0')).join('')}`;
+}
+
+// ─── TESTO CURVO: classe custom Fabric.js ──────────────────────
+// Disegna ogni carattere lungo un arco circolare reale
+const CurvedText = fabric.util.createClass(fabric.Object, {
+  type: 'curved-text',
+  text: 'Testo Curvo',
+  fontSize: 36,
+  fontFamily: 'Arial',
+  fill: '#000000',
+  fontWeight: 'normal',
+  fontStyle: 'normal',
+  radius: 100,      // raggio arco
+  spacing: 1,       // moltiplicatore spazio tra lettere
+  reverse: false,   // arco verso il basso
+  _textBounds: null,
+
+  initialize(options) {
+    this.callSuper('initialize', options);
+    this.set(options || {});
+    this._calcBounds();
+  },
+
+  _calcBounds() {
+    const r   = this.radius  || 45;
+    const fs  = this.fontSize|| 24;
+    const txt = this.text    || '';
+    // Larghezza: stima dal testo
+    const estTxtW = Math.min(txt.length * fs * 0.55, Math.PI * r);
+    this.width  = Math.max(estTxtW + fs * 0.5, r * 1.1);
+    // Altezza: con il nuovo offset (r*0.5 - fs*0.3) il testo va da
+    // circa (offset - r + fs/2) a (offset + fs/2)
+    // = r*0.5 - fs*0.3 - r + fs/2 = -r*0.5 + fs*0.2 (top)
+    // = r*0.5 - fs*0.3 + fs/2 = r*0.5 + fs*0.2 (bottom)
+    // totale height = r + fs*0.4 — aggiungiamo margine
+    this.height = r * 0.8 + fs * 1.2;
+    this.setCoords();
+  },
+
+  _renderChar(ctx, char, angle, r) {
+    ctx.save();
+    ctx.rotate(angle);
+    ctx.translate(0, this.reverse ? r : -r);
+    ctx.rotate(this.reverse ? Math.PI : 0);
+    ctx.fillStyle   = this.fill;
+    ctx.font        = `${this.fontStyle || 'normal'} ${this.fontWeight || 'normal'} ${this.fontSize}px ${this.fontFamily}`;
+    ctx.textAlign   = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(char, 0, 0);
+    ctx.restore();
+  },
+
+  _render(ctx) {
+    const text    = this.text || '';
+    const r       = this.radius || 100;
+    const spacing = this.spacing || 1;
+    const fs      = this.fontSize || 24;
+
+    ctx.font = `${this.fontStyle || 'normal'} ${this.fontWeight || 'normal'} ${fs}px ${this.fontFamily}`;
+
+    // Calcola larghezza totale per centrare
+    let totalAngle = 0;
+    const charData = [];
+    for (let i = 0; i < text.length; i++) {
+      const w = ctx.measureText(text[i]).width * spacing;
+      const a = w / r;
+      charData.push({ char: text[i], angle: a });
+      totalAngle += a;
+    }
+
+    // Offset verticale: sposta rendering verso il basso
+    // così il testo sta DENTRO la bounding box (non sopra il centro)
+    // Il testo è disegnato a -r dal centro → offsetY = r - fs
+    ctx.save();
+    ctx.translate(0, r * 0.5 - fs * 0.3);
+
+    let currentAngle = -totalAngle / 2;
+    for (const { char, angle } of charData) {
+      this._renderChar(ctx, char, currentAngle + angle / 2, r);
+      currentAngle += angle;
+    }
+    ctx.restore(); // chiude il translate di offset verticale
+  },
+
+  // Override set: marca dirty e ricalcola bounds su ogni cambio
+  set(key, value) {
+    this.callSuper('set', key, value);
+    // Proprietà che richiedono re-render visivo
+    const rerenderKeys = ['text','fontSize','fontFamily','fill','fontWeight','fontStyle','radius','spacing','reverse'];
+    const changed = typeof key === 'string' ? rerenderKeys.includes(key)
+      : typeof key === 'object' ? Object.keys(key).some(k => rerenderKeys.includes(k)) : false;
+    if (changed) {
+      this.dirty = true;
+      this._calcBounds();
+    }
+    return this;
+  },
+
+  toObject() {
+    return fabric.util.object.extend(this.callSuper('toObject'), {
+      text: this.text, fontSize: this.fontSize, fontFamily: this.fontFamily,
+      fill: this.fill, fontWeight: this.fontWeight, fontStyle: this.fontStyle,
+      radius: this.radius, spacing: this.spacing, reverse: this.reverse,
+    });
+  },
+});
+CurvedText.fromObject = function(obj, cb) { cb && cb(new CurvedText(obj)); };
+fabric.CurvedText = CurvedText;
+
+
+const DESIGN_ZONES = {
+  tshirt:     { left: 135, top: 115, width: 130, height: 160 },
+  hoodie:     { left: 135, top: 120, width: 130, height: 160 },
+  hoodie2:    { left: 135, top: 140, width: 130, height: 150 },
+  longsleeve: { left: 135, top: 115, width: 130, height: 160 },
+  vneck:      { left: 135, top: 115, width: 130, height: 160 },
+};
+
+// ─── LAYERS PANEL ──────────────────────────────────────────────
+function LayersPanel({ visible }) {
+  const [layers, setLayers] = useState([]);
+  useEffect(() => {
+    const update = () => {
+      const c = window.DesignerCanvas;
+      if (!c) return;
+      setLayers([...c.getObjects()].reverse().map((o, i) => ({
+        id: i,
+        type: o.type,
+        label: o.type === 'i-text' || o.type === 'text' ? o.text?.slice(0, 20) || 'Testo' : o.type === 'image' ? 'Immagine' : 'Forma',
+        obj: o
+      })));
+    };
+    DesignerBus.on('historyChange', update);
+    const interval = setInterval(update, 800);
+    update();
+    return () => {DesignerBus.off('historyChange', update);clearInterval(interval);};
+  }, []);
+
+  if (!visible) return null;
+  return (
+    <div style={{ position: 'absolute', bottom: 60, right: 230, width: 180, background: '#fff', borderRadius: 10,
+      boxShadow: '0 4px 20px rgba(0,0,0,0.15)', zIndex: 100, overflow: 'hidden', animation: 'fadeIn 0.15s ease' }}>
+      <div style={{ padding: '8px 12px', fontWeight: 600, fontSize: 12, background: '#2d3142', color: '#fff' }}>
+        Layer ({layers.length})
+      </div>
+      <div style={{ maxHeight: 200, overflowY: 'auto' }}>
+        {layers.length === 0 &&
+        <div style={{ padding: 16, textAlign: 'center', color: '#aaa', fontSize: 12 }}>Nessun elemento</div>
+        }
+        {layers.map((l, i) =>
+        <div key={i} onClick={() => {const c = window.DesignerCanvas;if (c) {c.setActiveObject(l.obj);c.renderAll();}}}
+        style={{ padding: '7px 12px', fontSize: 12, cursor: 'pointer', borderBottom: '1px solid #f5f5f5',
+          display: 'flex', alignItems: 'center', gap: 8, transition: 'background 0.1s' }}
+        onMouseEnter={(e) => e.currentTarget.style.background = '#f0faf9'}
+        onMouseLeave={(e) => e.currentTarget.style.background = ''}>
+            <span>{l.type === 'i-text' || l.type === 'text' ? '𝐓' : l.type === 'image' ? '🖼' : '◼'}</span>
+            <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{l.label}</span>
+          </div>
+        )}
+      </div>
+    </div>);
+
+}
+
+
+// ─── LogoButton — logo con long-press 3s per accesso admin ─────
+function LogoButton({ isMobile, logoInputRef, logoSrc, onLogoUpload }) {
+  const pressTimer = React.useRef(null);
+  const [pressing, setPressing] = React.useState(false);
+  const [progress, setProgress] = React.useState(0);
+  const progressTimer = React.useRef(null);
+
+  const startPress = () => {
+    setPressing(true);
+    setProgress(0);
+    let elapsed = 0;
+    progressTimer.current = setInterval(() => {
+      elapsed += 50;
+      setProgress(Math.min(100, (elapsed / 3000) * 100));
+    }, 50);
+    pressTimer.current = setTimeout(() => {
+      clearInterval(progressTimer.current);
+      setPressing(false);
+      setProgress(0);
+      // Apri admin — naviga a #admin
+      window.location.hash = 'admin';
+      window.dispatchEvent(new HashChangeEvent('hashchange'));
+    }, 3000);
+  };
+
+  const cancelPress = () => {
+    clearTimeout(pressTimer.current);
+    clearInterval(progressTimer.current);
+    setPressing(false);
+    setProgress(0);
+  };
+
+  // Logo da file esterno — mobile: WonderSpit_Logo.png, desktop: WonderSpit_Logo_esteso.png
+  const autoLogoSrc = isMobile ? 'WonderSpit_Logo.png' : 'WonderSpit_Logo_esteso.png';
+
+  return (
+    <div style={{ display:'flex', alignItems:'center', gap:6, marginRight: isMobile?2:4, flexShrink:0 }}>
+      <div
+        onMouseDown={startPress} onMouseUp={cancelPress} onMouseLeave={cancelPress}
+        onTouchStart={startPress} onTouchEnd={cancelPress}
+        title="Tieni premuto 3 secondi per accesso admin"
+        style={{ position:'relative', width: isMobile?30:34, height: isMobile?30:34,
+          borderRadius:7, overflow:'hidden', cursor:'pointer',
+          display:'flex', alignItems:'center', justifyContent:'center',
+          background: logoSrc ? 'transparent' : 'linear-gradient(135deg,#3fc7ba,#1db8aa)',
+          border:'1px solid rgba(255,255,255,0.15)', flexShrink:0,
+          userSelect:'none', WebkitUserSelect:'none' }}>
+        {/* Anello progresso long-press */}
+        {pressing && (
+          <svg style={{ position:'absolute', inset:0, width:'100%', height:'100%', zIndex:2 }}
+            viewBox="0 0 34 34">
+            <circle cx="17" cy="17" r="15" fill="none" stroke="#3fc7ba" strokeWidth="3"
+              strokeDasharray={`${progress * 0.942} 94.2`}
+              strokeLinecap="round" transform="rotate(-90 17 17)" />
+          </svg>
+        )}
+        {/* Logo immagine — prima tenta file esterno, poi logoSrc caricato, poi fallback W */}
+        <img
+          src={logoSrc || autoLogoSrc}
+          alt="Logo"
+          style={{ width:'100%', height:'100%', objectFit:'contain', position:'relative', zIndex:1 }}
+          onError={e => { e.target.style.display='none'; e.target.nextSibling.style.display='flex'; }}
+        />
+        <span style={{ display:'none', color:'#fff', fontWeight:800, fontSize:14,
+          position:'absolute', zIndex:1, alignItems:'center', justifyContent:'center',
+          width:'100%', height:'100%' }}>W</span>
+      </div>
+
+      {/* Nome app — solo desktop */}
+      {!isMobile && (
+        <div style={{ pointerEvents:'none' }}>
+          <div style={{ color:'#fff', fontWeight:700, fontSize:14, lineHeight:1 }}>WonderSpit</div>
+          <div style={{ color:'#8892b0', fontSize:10 }}>Product Designer</div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── Hook breakpoint responsive ────────────────────────────────
+function useBreakpoint() {
+  const [bp, setBp] = React.useState(() => {
+    const w = window.innerWidth;
+    if (w < 768) return 'mobile';
+    if (w < 1024) return 'tablet';
+    return 'desktop';
+  });
+  React.useEffect(() => {
+    const handler = () => {
+      const w = window.innerWidth;
+      if (w < 768) setBp('mobile');
+      else if (w < 1024) setBp('tablet');
+      else setBp('desktop');
+    };
+    window.addEventListener('resize', handler);
+    return () => window.removeEventListener('resize', handler);
+  }, []);
+  return bp;
+}
+
+// ─── Hook canvas scale — adatta canvas allo schermo + zoom ─────
+// Ritorna { baseScale, setBaseScale } — baseScale è il fit iniziale
+// Il zoom finale = baseScale * (zoomPct/100)
+function useCanvasBaseScale(bp) {
+  const [baseScale, setBaseScale] = React.useState(1);
+  React.useEffect(() => {
+    const calc = () => {
+      const leftW = bp === 'mobile' ? 0 : 56;
+      const topH  = bp === 'mobile' ? 48 : 52;
+      const botH  = bp === 'mobile' ? 110 : 50;
+      const avW = window.innerWidth  - leftW - 24;
+      const avH = window.innerHeight - topH - botH - 24;
+      const s = Math.min(avW / 400, avH / 440);
+      setBaseScale(Math.max(0.3, Math.min(1.0, s)));
+    };
+    calc();
+    window.addEventListener('resize', calc);
+    return () => window.removeEventListener('resize', calc);
+  }, [bp]);
+  return baseScale;
+}
+
+// ─── MobileToolDrawer — pannello strumenti che sale dal basso ──
+function MobileToolDrawer({ activeTab, onClose, onAddElement, products, currentProduct, onProductChange }) {
+  const { useState: useSt2, useEffect: useEff2 } = React;
+  if (!activeTab) return null;
+  const TABS2 = [
+    { id:'prodotto',  label:'Prodotto',  icon:'📦' },
+    { id:'ai',        label:'AI',        icon:'✨' },
+    { id:'text',      label:'Testo',     icon:'𝐓'  },
+    { id:'upload',    label:'Upload',    icon:'↑'  },
+    { id:'clipart',   label:'Clipart',   icon:'★'  },
+    { id:'shapes',    label:'Forme',     icon:'◼'  },
+    { id:'templates', label:'Template',  icon:'⊞'  },
+  ];
+  const tab = TABS2.find(t => t.id === activeTab);
+  return (
+    <div style={{ position:'fixed', inset:0, zIndex:200 }} onClick={onClose}>
+      {/* Overlay scuro */}
+      <div style={{ position:'absolute', inset:0, background:'rgba(0,0,0,0.45)' }} />
+      {/* Drawer dal basso */}
+      <div style={{ position:'absolute', bottom:0, left:0, right:0,
+        background:'#fff', borderRadius:'16px 16px 0 0',
+        maxHeight:'72vh', display:'flex', flexDirection:'column',
+        animation:'drawerUp 0.25s ease', boxShadow:'0 -4px 24px rgba(0,0,0,0.18)' }}
+        onClick={e => e.stopPropagation()}>
+        {/* Handle + header */}
+        <div style={{ padding:'10px 16px 8px', borderBottom:'1px solid #f0f0f0', flexShrink:0 }}>
+          <div style={{ width:36, height:4, background:'#e0e0e0', borderRadius:2, margin:'0 auto 10px' }} />
+          <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between' }}>
+            <div style={{ fontWeight:700, fontSize:14, color:'#2d3142', display:'flex', alignItems:'center', gap:7 }}>
+              <span>{tab?.icon}</span> {tab?.label}
+            </div>
+            <button onClick={onClose}
+              style={{ background:'none', border:'none', cursor:'pointer', color:'#bbb', fontSize:20, lineHeight:1 }}>✕</button>
+          </div>
+        </div>
+        {/* Contenuto panel */}
+        <div style={{ flex:1, overflowY:'auto' }}>
+          {activeTab==='prodotto'  && <ProdottoPanel products={products} currentProduct={currentProduct} onProductChange={id => { onProductChange(id); onClose(); }} />}
+          {activeTab==='ai'        && <AIPanel onAdd={onAddElement} />}
+          {activeTab==='text'      && <TextPanel onAdd={el => { onAddElement(el); onClose(); }} />}
+          {activeTab==='upload'    && <UploadPanel onAdd={el => { onAddElement(el); onClose(); }} />}
+          {activeTab==='clipart'   && <ClipartPanel onAdd={el => { onAddElement(el); onClose(); }} />}
+          {activeTab==='shapes'    && <ShapesPanel onAdd={el => { onAddElement(el); onClose(); }} />}
+          {activeTab==='templates' && <TemplatesPanel onAdd={el => { onAddElement(el); onClose(); }} />}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Clean combined App:
+function DesignerApp() {
+  const [product, setProduct] = useState('tshirt');
+  const [sideIndex, setSideIndex] = useState(0);
+  const [productColor, setProductColor] = useState('#ffffff');
+  const [canUndo, setCanUndo] = useState(false);
+  const [canRedo, setCanRedo] = useState(false);
+  const [showLayers, setShowLayers] = useState(false);
+  const [canvasReady, setCanvasReady] = useState(false);
+  // zoom è moltiplicatore relativo al baseScale: 100 = fit schermo, 200 = doppio
+  const [zoom, setZoom] = useState(100);
+  // clampZoom: mai sotto 100 (non si rimpicciolisce oltre il fit)
+  const clampZoom = (z) => Math.min(200, Math.max(100, Math.round(z)));
+  const [logoSrc, setLogoSrc] = useState(null);
+  const logoInputRef = useRef();
+
+  const handleLogoUpload = (file) => {
+    if (!file?.type.startsWith('image/')) return;
+    const r = new FileReader();
+    r.onload = e => setLogoSrc(e.target.result);
+    r.readAsDataURL(file);
+  };
+  const [sideData, setSideData] = useState({});
+  // previewMode gestito fuori React per evitare re-render che rompono il canvas
+  // zoneWarning rimosso — clipPath gestisce il fuori zona
+  const [imgQualityWarns, setImgQualityWarns] = useState([]); // ids of degraded imgs
+  const currentSideKey = `${product}_${sideIndex}`;
+
+  const currentProduct = PRODUCTS.find((p) => p.id === product) || PRODUCTS[0];
+  const zone = currentProduct?.printZone || { left:135, top:115, width:130, height:160 };
+  const scale = zoom / 100;
+  const productColors = currentProduct?.colors || ['#ffffff','#000000'];
+
+  // ── Zone boundary + image quality checker ───────────────────
+  const checkBounds = useCallback(() => {
+    const c = window.DesignerCanvas;
+    if (!c) return;
+    const z = zone;
+    let outside = false;
+    const imgWarns = [];
+    const imgCfg = AdminStore.get('imageSettings');
+    const tol = 8; // tolleranza pixel per bordi
+    c.getObjects().forEach(obj => {
+      let br;
+      if (obj.type === 'curved-text') {
+        // CurvedText: bounding box include tutto il cerchio
+        // Usa solo il centro dell'oggetto per capire se è nella zona
+        const cx = obj.left + (obj.width  || 0) / 2;
+        const cy = obj.top  + (obj.height || 0) / 2;
+        const inZone = cx >= z.left && cx <= z.left + z.width &&
+                       cy >= z.top  && cy <= z.top  + z.height;
+        if (!inZone) outside = true;
+        return; // salta il check normale per curved-text
+      }
+      br = obj.getBoundingRect(false, true);
+      if (br.left < z.left - tol || br.top < z.top - tol ||
+          br.left + br.width > z.left + z.width + tol ||
+          br.top + br.height > z.top + z.height) {
+        outside = true;
+      }
+      // Image quality check
+      if (obj.type === 'image' && obj._originalW) {
+        const scaleX = obj.getScaledWidth() / obj._originalW;
+        const scaleY = obj.getScaledHeight() / obj._originalH;
+        if (Math.max(scaleX, scaleY) > imgCfg.degradeWarnScale) {
+          imgWarns.push(obj);
+        }
+      }
+    });
+    // setZoneWarning rimosso
+    setImgQualityWarns(imgWarns.map(o => o.__uid));
+  }, [zone]);
+
+  // Preview rimosso
+
+  // Init canvas + wheel zoom + pinch-to-zoom touch
+  useEffect(() => {
+    const init = () => {
+      const el = document.getElementById('main-canvas');
+      if (!el || window.DesignerCanvas) return;
+      const svgH = ['longsleeve'].includes(product) ? 500 : 440;
+      const canvas = new fabric.Canvas('main-canvas', {
+        width: 400, height: svgH, preserveObjectStacking: true,
+        backgroundColor: 'rgba(0,0,0,0)'
+      });
+      window.DesignerCanvas = canvas;
+
+      // ── Nascondi TUTTI i controlli default Fabric ─────────────
+      // Teniamo solo i nostri 4 angoli custom
+      fabric.Object.prototype.setControlsVisibility({
+        mt: false,  // middle top
+        mb: false,  // middle bottom
+        ml: false,  // middle left
+        mr: false,  // middle right
+        mtr: false, // rotate handle centrale
+        tl: false,  // top-left (sostituito da deleteControl)
+        tr: false,  // top-right (sostituito da rotateControl)
+        bl: false,  // bottom-left (sostituito da duplicateControl2)
+        br: false,  // bottom-right (sostituito da resizeControl)
+      });
+
+      // ── Controlli custom sulla cornice oggetto ────────────────
+      // X rossa (elimina) — quadrato rosso in alto sinistra stile Lumise
+      fabric.Object.prototype.controls.deleteControl = new fabric.Control({
+        x: -0.5, y: -0.5,
+        offsetX: -1, offsetY: -1,
+        cursorStyle: 'pointer',
+        mouseUpHandler: (_e, transform) => {
+          const target = transform.target;
+          canvas.remove(target);
+          canvas.renderAll();
+          DesignerHistory.save(canvas);
+          DesignerBus.emit('selectionCleared');
+          return true;
+        },
+        render: (ctx, left, top, _style, fabricObj) => {
+          const size = 22;
+          ctx.save();
+          ctx.translate(left, top);
+          // Quadrato rosso
+          ctx.fillStyle = '#e74c3c';
+          ctx.strokeStyle = '#fff';
+          ctx.lineWidth = 1.5;
+          const r = 4;
+          ctx.beginPath();
+          ctx.moveTo(-size/2+r, -size/2);
+          ctx.lineTo(size/2-r, -size/2);
+          ctx.quadraticCurveTo(size/2, -size/2, size/2, -size/2+r);
+          ctx.lineTo(size/2, size/2-r);
+          ctx.quadraticCurveTo(size/2, size/2, size/2-r, size/2);
+          ctx.lineTo(-size/2+r, size/2);
+          ctx.quadraticCurveTo(-size/2, size/2, -size/2, size/2-r);
+          ctx.lineTo(-size/2, -size/2+r);
+          ctx.quadraticCurveTo(-size/2, -size/2, -size/2+r, -size/2);
+          ctx.closePath();
+          ctx.fill();
+          // X bianca
+          ctx.strokeStyle = '#fff';
+          ctx.lineWidth = 2;
+          ctx.lineCap = 'round';
+          const pad = 6;
+          ctx.beginPath();
+          ctx.moveTo(-size/2+pad, -size/2+pad);
+          ctx.lineTo(size/2-pad, size/2-pad);
+          ctx.stroke();
+          ctx.beginPath();
+          ctx.moveTo(size/2-pad, -size/2+pad);
+          ctx.lineTo(-size/2+pad, size/2-pad);
+          ctx.stroke();
+          ctx.restore();
+        },
+        cornerSize: 22,
+      });
+
+      // Rotazione — quadrato grigio in alto destra, freccia circolare chiara
+      fabric.Object.prototype.controls.rotateControl = new fabric.Control({
+        x: 0.5, y: -0.5,
+        offsetX: 1, offsetY: -1,
+        cursorStyle: 'crosshair',
+        actionHandler: fabric.controlsUtils.rotationWithSnapping,
+        actionName: 'rotate',
+        render: (ctx, left, top) => {
+          const size = 22;
+          ctx.save();
+          ctx.translate(left, top);
+          // Sfondo quadrato arrotondato grigio
+          ctx.fillStyle = '#4a5568';
+          const r = 4;
+          ctx.beginPath();
+          ctx.moveTo(-size/2+r,-size/2); ctx.lineTo(size/2-r,-size/2);
+          ctx.quadraticCurveTo(size/2,-size/2,size/2,-size/2+r);
+          ctx.lineTo(size/2,size/2-r); ctx.quadraticCurveTo(size/2,size/2,size/2-r,size/2);
+          ctx.lineTo(-size/2+r,size/2); ctx.quadraticCurveTo(-size/2,size/2,-size/2,size/2-r);
+          ctx.lineTo(-size/2,-size/2+r); ctx.quadraticCurveTo(-size/2,-size/2,-size/2+r,-size/2);
+          ctx.closePath(); ctx.fill();
+          // Freccia circolare: arco 270° con punta
+          ctx.strokeStyle = '#fff'; ctx.lineWidth = 2.2; ctx.lineCap = 'round';
+          // Arco principale
+          ctx.beginPath();
+          ctx.arc(0, 0, 6, Math.PI * 0.15, Math.PI * 1.85);
+          ctx.stroke();
+          // Punta freccia in alto destra
+          ctx.fillStyle = '#fff';
+          ctx.beginPath();
+          ctx.save();
+          ctx.translate(5.5, -2);
+          ctx.rotate(-0.3);
+          ctx.moveTo(0, -3); ctx.lineTo(3, 1); ctx.lineTo(-3, 1);
+          ctx.closePath(); ctx.fill();
+          ctx.restore();
+          // Punta freccia in alto sinistra
+          ctx.beginPath();
+          ctx.save();
+          ctx.translate(-5.5, -2);
+          ctx.rotate(0.3);
+          ctx.moveTo(0, -3); ctx.lineTo(3, 1); ctx.lineTo(-3, 1);
+          ctx.closePath(); ctx.fill();
+          ctx.restore();
+          ctx.restore();
+        },
+        cornerSize: 22,
+      });
+
+      // Duplica — quadrato teal in basso sinistra
+      fabric.Object.prototype.controls.duplicateControl2 = new fabric.Control({
+        x: -0.5, y: 0.5,
+        offsetX: -1, offsetY: 1,
+        cursorStyle: 'pointer',
+        mouseUpHandler: (_e, transform) => {
+          const target = transform.target;
+          target.clone(cloned => {
+            cloned.set({ left: target.left + 20, top: target.top + 20 });
+            canvas.add(cloned);
+            canvas.setActiveObject(cloned);
+            canvas.renderAll();
+            DesignerHistory.save(canvas);
+          });
+          return true;
+        },
+        render: (ctx, left, top) => {
+          const size = 22;
+          ctx.save();
+          ctx.translate(left, top);
+          ctx.fillStyle = '#3fc7ba';
+          const r = 4;
+          ctx.beginPath();
+          ctx.moveTo(-size/2+r,-size/2); ctx.lineTo(size/2-r,-size/2);
+          ctx.quadraticCurveTo(size/2,-size/2,size/2,-size/2+r);
+          ctx.lineTo(size/2,size/2-r); ctx.quadraticCurveTo(size/2,size/2,size/2-r,size/2);
+          ctx.lineTo(-size/2+r,size/2); ctx.quadraticCurveTo(-size/2,size/2,-size/2,size/2-r);
+          ctx.lineTo(-size/2,-size/2+r); ctx.quadraticCurveTo(-size/2,-size/2,-size/2+r,-size/2);
+          ctx.closePath(); ctx.fill();
+          // Icona duplica (due quadratini sovrapposti)
+          ctx.strokeStyle = '#fff'; ctx.lineWidth = 1.8;
+          ctx.strokeRect(-4, -5, 8, 8);
+          ctx.fillStyle = '#3fc7ba'; ctx.fillRect(-7, -2, 8, 8);
+          ctx.strokeRect(-7, -2, 8, 8);
+          ctx.restore();
+        },
+        cornerSize: 22,
+      });
+
+      // Resize proporzionale — basso destra (grigio)
+      fabric.Object.prototype.controls.resizeControl = new fabric.Control({
+        x: 0.5, y: 0.5,
+        offsetX: 1, offsetY: 1,
+        cursorStyle: 'nwse-resize',
+        actionHandler: fabric.controlsUtils.scalingEqually,
+        render: (ctx, left, top) => {
+          const size = 22;
+          ctx.save();
+          ctx.translate(left, top);
+          ctx.fillStyle = '#7f8c8d';
+          const r = 4;
+          ctx.beginPath();
+          ctx.moveTo(-size/2+r,-size/2); ctx.lineTo(size/2-r,-size/2);
+          ctx.quadraticCurveTo(size/2,-size/2,size/2,-size/2+r);
+          ctx.lineTo(size/2,size/2-r); ctx.quadraticCurveTo(size/2,size/2,size/2-r,size/2);
+          ctx.lineTo(-size/2+r,size/2); ctx.quadraticCurveTo(-size/2,size/2,-size/2,size/2-r);
+          ctx.lineTo(-size/2,-size/2+r); ctx.quadraticCurveTo(-size/2,-size/2,-size/2+r,-size/2);
+          ctx.closePath(); ctx.fill();
+          ctx.strokeStyle = '#fff'; ctx.lineWidth = 2; ctx.lineCap = 'round';
+          ctx.beginPath(); ctx.moveTo(-5,-5); ctx.lineTo(5,5); ctx.stroke();
+          ctx.beginPath(); ctx.moveTo(5,1); ctx.lineTo(5,5); ctx.lineTo(1,5); ctx.stroke();
+          ctx.beginPath(); ctx.moveTo(-5,-1); ctx.lineTo(-5,-5); ctx.lineTo(-1,-5); ctx.stroke();
+          ctx.restore();
+        },
+        cornerSize: 22,
+      });
+
+
+
+
+      canvas.on('selection:created', (e) => DesignerBus.emit('selectionCreated', e.selected?.[0]));
+      canvas.on('selection:updated', (e) => DesignerBus.emit('selectionUpdated', e.selected?.[0]));
+      canvas.on('selection:cleared', () => DesignerBus.emit('selectionCleared'));
+      canvas.on('object:modified', () => { DesignerHistory.save(canvas); checkBounds(); });
+      canvas.on('object:added', () => { DesignerHistory.save(canvas); checkBounds(); });
+      canvas.on('object:removed', () => checkBounds());
+
+      // ── Rotella del mouse → zoom (desktop) ─────────────────────
+      const canvasEl = canvas.getElement().parentElement;
+      const onWheel = (e) => {
+        e.preventDefault();
+        // Rotella su = zoom in, giù = zoom out (min 100 = fit schermo)
+        setZoom(z => {
+          const delta = e.deltaY > 0 ? -8 : 8;
+          return Math.min(200, Math.max(100, z + delta));
+        });
+      };
+      canvasEl.addEventListener('wheel', onWheel, { passive: false });
+
+      // ── Pinch-to-zoom touch (mobile + tablet) ───────────────────
+      // Stesso zoom dello slider — min 100 (fit schermo), max 200
+      let lastDist = null;
+      const onTouchStart = (e) => {
+        if (e.touches.length === 2) lastDist = null;
+      };
+      const onTouchMove = (e) => {
+        if (e.touches.length !== 2) return;
+        e.preventDefault();
+        const dx = e.touches[0].clientX - e.touches[1].clientX;
+        const dy = e.touches[0].clientY - e.touches[1].clientY;
+        const dist = Math.sqrt(dx*dx + dy*dy);
+        if (lastDist !== null) {
+          const delta = (dist - lastDist) * 0.4; // sensibilità pinch
+          setZoom(z => Math.min(200, Math.max(100, z + delta)));
+        }
+        lastDist = dist;
+      };
+      const onTouchEnd = () => { lastDist = null; };
+      canvasEl.addEventListener('touchstart', onTouchStart, { passive: true });
+      canvasEl.addEventListener('touchmove', onTouchMove, { passive: false });
+      canvasEl.addEventListener('touchend', onTouchEnd, { passive: true });
+
+      // ── ClipPath per oggetto — taglia solo il contenuto, non i controlli ──
+      // Funzione globale per creare clipRect per ogni oggetto
+      window._designerZone = zone;
+      window._makeClipRect = (z) => new fabric.Rect({
+        left: z.left, top: z.top,
+        width: z.width, height: z.height,
+        absolutePositioned: true,
+      });
+      // Applica clipPath a ogni nuovo oggetto aggiunto
+      canvas.on('object:added', (e) => {
+        const obj = e.target;
+        if (!obj || obj._noClip || obj.clipPath) return;
+        const z = window._designerZone || zone;
+        if (window._makeClipRect) obj.clipPath = window._makeClipRect(z);
+      });
+
+      setTimeout(() => { DesignerHistory.save(canvas); setCanvasReady(true); }, 150);
+
+      // Cleanup listeners
+      canvas._extraCleanup = () => {
+        canvasEl.removeEventListener('wheel', onWheel);
+        canvasEl.removeEventListener('touchstart', onTouchStart);
+        canvasEl.removeEventListener('touchmove', onTouchMove);
+        canvasEl.removeEventListener('touchend', onTouchEnd);
+      };
+    };
+    const t = setTimeout(init, 80);
+    return () => {
+      clearTimeout(t);
+      if (window.DesignerCanvas) {
+        if (window.DesignerCanvas._extraCleanup) window.DesignerCanvas._extraCleanup();
+        window.DesignerCanvas.dispose();
+        window.DesignerCanvas = null;
+      }
+    };
+  }, []);
+
+  // Save/restore per side
+  const switchSide = (newProduct, newSide) => {
+    const c = window.DesignerCanvas;
+    if (c) {
+      const json = c.toJSON(['id']);
+      setSideData((d) => ({ ...d, [currentSideKey]: json }));
+      // Aggiorna zona globale per nuovi oggetti
+      const newZone = (PRODUCTS.find(p => p.id === newProduct)?.printZone) || zone;
+      window._designerZone = newZone;
+      const nextKey = `${newProduct}_${newSide}`;
+      const nextData = sideData[nextKey];
+      if (nextData) {
+        c.loadFromJSON(nextData, () => c.renderAll());
+      } else {
+        c.clear();c.renderAll();
+      }
+    }
+    setProduct(newProduct);
+    setSideIndex(newSide);
+  };
+
+  useEffect(() => {
+    const h = (data) => {setCanUndo(data.canUndo);setCanRedo(data.canRedo);};
+    DesignerBus.on('historyChange', h);
+    return () => DesignerBus.off('historyChange', h);
+  }, []);
+
+  useEffect(() => {
+    const handler = (e) => {
+      const c = window.DesignerCanvas;
+      if (!c) return;
+      if ((e.ctrlKey || e.metaKey) && e.key === 'z') {e.preventDefault();DesignerHistory.undo(c);}
+      if ((e.ctrlKey || e.metaKey) && e.key === 'y') {e.preventDefault();DesignerHistory.redo(c);}
+      if ((e.key === 'Delete' || e.key === 'Backspace') && !['INPUT', 'TEXTAREA'].includes(document.activeElement?.tagName)) {
+        const obj = c.getActiveObject();if (obj) {c.remove(obj);c.renderAll();}
+      }
+    };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, []);
+
+  const addElement = useCallback((el) => {
+    const canvas = window.DesignerCanvas;
+    if (!canvas) return;
+    const cx = zone.left + zone.width / 2;
+    const cy = zone.top + zone.height / 2;
+
+    if (el.type === 'text') {
+      const placeholderText = 'Scrivi qui...';
+      // cx/cy già calcolati sopra = centro zona stampa
+
+      // Effetto curvo REALE — usa la classe CurvedText custom
+      if (el.effect === 'curved') {
+        // CurvedText: raggio ridotto per stare nella zona stampa 130px
+        const crvRadius = 45;
+        const crvLeft = cx - crvRadius - 10;
+        const crvTop  = cy - crvRadius - 10;
+
+        const curvedObj = new fabric.CurvedText({
+          left: crvLeft, top: crvTop,
+          // NO originX/Y:center — usiamo top-left esplicito
+          text: el.placeholder ? placeholderText : (el.text || 'Testo Curvo'),
+          fontSize: Math.min(24, el.size || 24), // più piccolo per stare nella curva
+          fontFamily: el.font || 'Arial',
+          fill: el.placeholder ? 'rgba(150,150,150,0.5)' : (el.color || '#000000'),
+          fontWeight: el.bold ? 'bold' : 'normal',
+          fontStyle: el.italic ? 'italic' : 'normal',
+          radius: crvRadius,
+          reverse: false,
+          spacing: 1.1,
+          _isPlaceholder: el.placeholder || false,
+          _realColor: el.color || '#000000',
+          _isCurved: true,
+        });
+        curvedObj.on('mousedblclick', function() {
+          if (this._isPlaceholder) {
+            this.set({ text: '', fill: this._realColor, _isPlaceholder: false });
+          }
+          const newText = window.prompt('Modifica testo curvo:', this.text);
+          if (newText !== null) {
+            this.set({ text: newText });
+            canvas.renderAll();
+            DesignerHistory.save(canvas);
+          }
+        });
+        // Applica clipPath prima di add
+        if (window._makeClipRect) curvedObj.clipPath = window._makeClipRect(window._designerZone || zone);
+        curvedObj._noClip = true;
+        // Posiziona con stima iniziale
+        curvedObj.set({ left: cx - crvRadius - 10, top: cy - crvRadius * 0.4 });
+        canvas.add(curvedObj);
+        // Corregge posizione dopo render con bounds reali
+        setTimeout(() => {
+          canvas.renderAll();
+          const br = curvedObj.getBoundingRect(false, true);
+          curvedObj.set({
+            left: cx - br.width  / 2,
+            top:  cy - br.height / 2,
+          });
+          curvedObj.setCoords();
+          canvas.setActiveObject(curvedObj);
+          canvas.renderAll();
+          DesignerHistory.save(canvas);
+          checkBounds();
+        }, 60);
+        return;
+      }
+
+      // Testo normale (IText editabile)
+      // fontSize adatto alla zona stampa e lunghezza testo
+      const txt = el.placeholder ? 'Scrivi qui...' : (el.text || 'Testo');
+      const txtLen = Math.max(txt.length, 1);
+      // Stima: ogni carattere occupa circa fontSize*0.6 px di larghezza
+      // vogliamo che il testo stia nella zona stampa (zone.width)
+      // fontSize = zone.width / (txtLen * 0.6) ma non più di 48
+      const autoSize = Math.min(48, Math.max(16, Math.floor(zone.width / (txtLen * 0.65))));
+      const obj = new fabric.IText(el.placeholder ? placeholderText : (el.text || 'Testo'), {
+        left: 0, top: 0,
+        fontFamily: el.font || 'Arial', fontSize: autoSize,
+        fill: el.placeholder ? 'rgba(150,150,150,0.5)' : (el.color || '#000000'),
+        fontWeight: el.bold ? 'bold' : 'normal',
+        fontStyle: el.italic ? 'italic' : 'normal',
+        textAlign: el.align || 'center',
+        _isPlaceholder: el.placeholder || false,
+        _realColor: el.color || '#000000',
+        ...(el.effect === 'skew' ? { skewX: 12 } : {})
+      });
+      // Placeholder behavior: clear on editing start
+      obj.on('editing:entered', function() {
+        if (this._isPlaceholder) {
+          this.set({ text: '', fill: this._realColor });
+          this._isPlaceholder = false;
+          canvas.renderAll();
+        }
+      });
+      // Posiziona usando dimensioni reali di Fabric dopo primo render
+      // left/top in Fabric senza originX/Y = angolo top-left dell'oggetto
+      // Stima altezza testo: fontSize * 1.2 (line-height)
+      const estH = autoSize * 1.2;
+      const estW = Math.min(autoSize * txt.length * 0.6, zone.width - 10);
+      obj.set({
+        left: cx - estW / 2,
+        top:  cy - estH / 2,
+      });
+      // Applica clipPath prima di add
+      if (window._makeClipRect) obj.clipPath = window._makeClipRect(window._designerZone || zone);
+      obj._noClip = true;
+      canvas.add(obj);
+      // Dopo render corregge con dimensioni reali
+      setTimeout(() => {
+        canvas.renderAll();
+        const br = obj.getBoundingRect(false, true);
+        obj.set({
+          left: cx - br.width  / 2,
+          top:  cy - br.height / 2,
+        });
+        obj.setCoords();
+        canvas.setActiveObject(obj);
+        canvas.renderAll();
+        DesignerHistory.save(canvas);
+        checkBounds();
+      }, 50);
+
+    } else if (el.type === 'image') {
+      fabric.Image.fromURL(el.src, (img) => {
+        const s = Math.min((zone.width - 10) / img.width, (zone.height - 10) / img.height, 1);
+        img.set({ left: cx, top: cy, originX: 'center', originY: 'center', scaleX: s, scaleY: s });
+        img._originalW = img.width;
+        img._originalH = img.height;
+        img.__uid = `img_${Date.now()}`;
+        if (window._makeClipRect) img.clipPath = window._makeClipRect(window._designerZone || zone);
+        img._noClip = true;
+        canvas.add(img); canvas.setActiveObject(img); canvas.renderAll();
+        checkBounds();
+      }, { crossOrigin: 'anonymous' });
+
+    } else if (el.type === 'clipart') {
+      const svgStr = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">${el.svg}</svg>`;
+      fabric.loadSVGFromString(svgStr, (objects, options) => {
+        const group = fabric.util.groupSVGElements(objects, options);
+        const s = 80 / Math.max(group.width || 24, group.height || 24);
+        group.set({ left: cx, top: cy, originX: 'center', originY: 'center', scaleX: s, scaleY: s });
+        canvas.add(group);canvas.setActiveObject(group);canvas.renderAll();
+      });
+
+    } else if (el.type === 'shape') {
+      const opts = { left: cx, top: cy, originX: 'center', originY: 'center',
+        fill: el.fill || '#3fc7ba', stroke: el.stroke || 'transparent', strokeWidth: el.strokeWidth || 0 };
+      let obj;
+      if (el.shape === 'rect') obj = new fabric.Rect({ ...opts, width: 100, height: 70 });else
+      if (el.shape === 'rounded-rect') obj = new fabric.Rect({ ...opts, width: 100, height: 70, rx: 12, ry: 12 });else
+      if (el.shape === 'circle') obj = new fabric.Circle({ ...opts, radius: 45 });else
+      if (el.shape === 'triangle') obj = new fabric.Triangle({ ...opts, width: 90, height: 80 });else
+      if (el.shape === 'line') obj = new fabric.Line([0, 0, 120, 0], { ...opts, stroke: el.fill || '#3fc7ba', strokeWidth: Math.max(el.strokeWidth || 3, 3) });
+      if (obj) {canvas.add(obj);canvas.setActiveObject(obj);}
+
+    } else if (el.type === 'template') {
+      const t = el.template;
+      t.texts.forEach((txt, i) => {
+        canvas.add(new fabric.IText(txt, {
+          left: cx, top: cy + i * 40 - 20, originX: 'center', originY: 'center',
+          fontFamily: 'Impact', fontSize: i === 0 ? 32 : 20, fill: t.colors[i % t.colors.length],
+          fontWeight: 'bold', textAlign: 'center'
+        }));
+      });
+    }
+    canvas.renderAll();
+  }, [zone]);
+
+  // ── Admin export gate ────────────────────────────────────────
+  const ADMIN_PASSWORD = 'wonderspit2025'; // ← cambia qui la password admin
+  const [exportUnlocked, setExportUnlocked] = useState(false);
+  const [showPwdModal, setShowPwdModal] = useState(false);
+  const [pwdInput, setPwdInput] = useState('');
+  const [pwdError, setPwdError] = useState(false);
+
+  const handleExportClick = () => {
+    if (exportUnlocked) { doExport(); return; }
+    setShowPwdModal(true); setPwdInput(''); setPwdError(false);
+  };
+
+  const checkPassword = () => {
+    if (pwdInput === ADMIN_PASSWORD) {
+      setExportUnlocked(true); setShowPwdModal(false); doExport();
+    } else {
+      setPwdError(true);
+    }
+  };
+
+  const doExport = () => {
+    const c = window.DesignerCanvas; if (!c) return;
+    c.discardActiveObject(); c.renderAll();
+    const a = document.createElement('a');
+    a.href = c.toDataURL({ format: 'png', quality: 1, multiplier: 2 });
+    a.download = `design-${product}-${currentProduct.sides[sideIndex]}.png`;
+    a.click();
+  };
+
+  const exportPNG = handleExportClick;
+
+  const clearAll = () => {
+    const c = window.DesignerCanvas;if (!c) return;
+    if (!confirm('Eliminare tutto dal canvas?')) return;
+    c.clear();c.renderAll();DesignerHistory.save(c);
+  };
+
+  const bp = useBreakpoint();
+  const isMobile = bp === 'mobile';
+  const isTablet = bp === 'tablet';
+  const baseScale = useCanvasBaseScale(bp);
+  const [mobileActiveTab, setMobileActiveTab] = useState(null);
+  // stageRef rimosso — preview gestita via Fabric.js
+
+  // canvasScale = fit base * zoom utente (zoom state condiviso desktop+mobile)
+  const canvasScale = baseScale * (zoom / 100);
+
+
+
+  const svgContent = (PRODUCT_SVGS[product] || PRODUCT_SVGS.tshirt)(productColor);
+
+  // ── Variabili canvas ──────────────────────────────────────────
+  const svgH = product === 'longsleeve' ? 500 : 440; // longsleeve è più alta
+
+  return (
+    <div style={{ display:'flex', flexDirection:'column', height:'100vh', overflow:'hidden' }}>
+
+      {/* ════ TOP BAR ════════════════════════════════════════════ */}
+      <div style={{ height: isMobile ? 48 : 52, background:'#2d3142', display:'flex',
+        alignItems:'center', padding: isMobile ? '0 10px' : '0 16px',
+        gap: isMobile ? 6 : 10, flexShrink:0, boxShadow:'0 2px 8px rgba(0,0,0,0.25)', zIndex:10 }}>
+
+        {/* ── Logo — tieni premuto 3s per admin ── */}
+        <LogoButton isMobile={isMobile} logoInputRef={logoInputRef}
+          logoSrc={logoSrc} onLogoUpload={handleLogoUpload} />
+        <input ref={logoInputRef} type="file" accept="image/*" style={{ display:'none' }}
+          onChange={e => handleLogoUpload(e.target.files[0])} />
+
+        {/* ── Undo/Redo ── */}
+        {[['↩', () => DesignerHistory.undo(window.DesignerCanvas), !canUndo],
+          ['↪', () => DesignerHistory.redo(window.DesignerCanvas), !canRedo]].map(([ico,fn,dis],i) => (
+          <button key={i} onClick={fn} disabled={dis}
+            style={{ background:'none', border:'1px solid rgba(255,255,255,0.12)',
+              color: dis ? '#444' : '#bbb', borderRadius:5,
+              padding: isMobile ? '3px 8px' : '4px 10px',
+              cursor: dis ? 'not-allowed' : 'pointer', fontSize:15, flexShrink:0 }}>
+            {ico}
+          </button>
+        ))}
+
+        {/* ── Zoom slider — solo desktop/tablet ── */}
+        {!isMobile && (
+          <>
+            <div style={{ width:1, height:28, background:'rgba(255,255,255,0.1)', margin:'0 2px', flexShrink:0 }} />
+            <div style={{ display:'flex', alignItems:'center', gap:5, flexShrink:0 }}>
+              <span style={{ fontSize:14, userSelect:'none' }}>🔍</span>
+              <button onClick={() => setZoom(z => Math.max(100, z-10))}
+                style={{ background:'rgba(255,255,255,0.08)', border:'none', color:'#aaa',
+                  borderRadius:4, width:20, height:20, cursor:'pointer', fontSize:14,
+                  display:'flex', alignItems:'center', justifyContent:'center', lineHeight:1 }}>–</button>
+              <input type="range" min={100} max={200} value={Math.round(zoom)}
+                onChange={e => setZoom(+e.target.value)}
+                style={{ width:80, accentColor:'#3fc7ba', cursor:'pointer' }} />
+              <button onClick={() => setZoom(z => Math.min(200, z+10))}
+                style={{ background:'rgba(255,255,255,0.08)', border:'none', color:'#aaa',
+                  borderRadius:4, width:20, height:20, cursor:'pointer', fontSize:14,
+                  display:'flex', alignItems:'center', justifyContent:'center', lineHeight:1, flexShrink:0 }}>+</button>
+              <span style={{ color:'#8892b0', fontSize:11, width:34, textAlign:'center' }}>{Math.round(zoom)}%</span>
+            </div>
+          </>
+        )}
+
+        {/* ── Destra top bar ── */}
+        <div style={{ marginLeft:'auto', display:'flex', gap: isMobile ? 5 : 8, alignItems:'center' }}>
+
+          {/* Layer — solo desktop */}
+          {!isMobile && (
+            <button onClick={() => setShowLayers(v => !v)}
+              style={{ background: showLayers ? 'rgba(63,199,186,0.2)' : 'rgba(255,255,255,0.07)',
+                border:`1px solid ${showLayers ? '#3fc7ba' : 'rgba(255,255,255,0.12)'}`,
+                color: showLayers ? '#3fc7ba' : '#bbb', borderRadius:6, padding:'5px 12px', cursor:'pointer', fontSize:12 }}>
+              ⊞ Layer
+            </button>
+          )}
+
+          {/* Export admin — solo desktop */}
+          {!isMobile && (
+            <button onClick={exportPNG}
+              title={exportUnlocked ? 'Download PNG' : 'Solo admin'}
+              style={{ background: exportUnlocked ? 'rgba(63,199,186,0.2)' : 'rgba(255,255,255,0.1)',
+                border:`1px solid ${exportUnlocked ? '#3fc7ba' : 'rgba(255,255,255,0.2)'}`,
+                color: exportUnlocked ? '#3fc7ba' : '#fff', borderRadius:6,
+                padding:'6px 14px', cursor:'pointer', fontSize:12, fontWeight:500,
+                display:'flex', alignItems:'center', gap:4 }}>
+              <span>{exportUnlocked ? '🔓' : '🔒'}</span> ↓ SCARICA
+            </button>
+          )}
+
+          {/* Carrello — desktop: disabilitato */}
+          {!isMobile && (
+            <button disabled title="Funzione in arrivo"
+              style={{ background:'#555', border:'none', color:'#999', borderRadius:6,
+                padding:'6px 14px', cursor:'not-allowed', fontSize:13, fontWeight:600, opacity:0.6 }}>
+              🛒 {!isTablet && 'Aggiungi al carrello'}
+            </button>
+          )}
+
+          {/* Carrello mobile — in alto destra */}
+          {isMobile && (
+            <button disabled title="Prossimamente"
+              style={{ background:'rgba(63,199,186,0.15)', border:'1px solid rgba(63,199,186,0.3)',
+                color:'#3fc7ba', borderRadius:8, padding:'5px 12px',
+                cursor:'not-allowed', fontSize:13, fontWeight:700, opacity:0.8 }}>
+              🛒
+            </button>
+          )}
+
+        </div>
+      </div>
+
+{/* ════ MAIN AREA ══════════════════════════════════════════ */}
+      <div style={{ flex:1, display:'flex', overflow:'hidden', position:'relative' }}>
+
+        {/* ── Sidebar sinistra — solo desktop e tablet ── */}
+        {!isMobile && (
+          <LeftPanel
+            onAddElement={addElement}
+            products={PRODUCTS}
+            currentProduct={product}
+            onProductChange={id => switchSide(id, 0)}
+          />
+        )}
+
+        {/* ── Canvas centrale ── */}
+        <div style={{ flex:1, display:'flex', flexDirection:'column', alignItems:'center',
+          justifyContent: isMobile ? 'flex-start' : 'center',
+          background:'#ebeced', overflow:'hidden', position:'relative',
+          paddingTop: isMobile ? 8 : 0,
+          paddingBottom: isMobile ? 110 : 0 }}>
+
+          {/* Selettore colori — barra orizzontale scrollabile */}
+          <div className="colors-scroll"
+            style={{ position: isMobile ? 'relative' : 'absolute',
+              top: isMobile ? 0 : 12,
+              left: isMobile ? 'auto' : '50%',
+              transform: isMobile ? 'none' : 'translateX(-50%)',
+              width: isMobile ? '100%' : 'auto',
+              display:'flex', alignItems:'center', gap:5,
+              background:'rgba(255,255,255,0.96)',
+              borderRadius: isMobile ? 0 : 24,
+              padding: isMobile ? '6px 12px' : '5px 12px',
+              boxShadow: isMobile ? '0 1px 6px rgba(0,0,0,0.08)' : '0 2px 10px rgba(0,0,0,0.1)',
+              zIndex:5, flexShrink:0, marginBottom: isMobile ? 4 : 0 }}>
+            <span style={{ fontSize:11, color:'#888', marginRight:2, whiteSpace:'nowrap', flexShrink:0 }}>
+              {currentProduct?.name}:
+            </span>
+            {productColors.map(c => (
+              <div key={c} onClick={() => setProductColor(c)}
+                style={{ width:isMobile?24:20, height:isMobile?24:20, borderRadius:'50%',
+                  background:c, cursor:'pointer', flexShrink:0,
+                  border: productColor===c ? '2px solid #3fc7ba' : '1px solid #ccc',
+                  boxShadow: productColor===c ? '0 0 0 2px rgba(63,199,186,0.3)' : 'none',
+                  transition:'all 0.15s' }} />
+            ))}
+          </div>
+
+          {/* Alert zona rimosso — clipPath taglia automaticamente */}
+
+          {/* Stage canvas — scalato automaticamente */}
+          <div className="canvas-stage"
+            style={{ position:'relative',
+              transform:`scale(${canvasScale})`,
+              // Centra zoom sul centro della zona stampa
+              transformOrigin: `${((zone.left + zone.width/2) / 400 * 100).toFixed(1)}% ${((zone.top + zone.height/2) / (svgH) * 100).toFixed(1)}%`,
+              transition:'transform 0.2s',
+              marginTop: isMobile ? 4 : 0,
+              flexShrink: 0,
+            }}>
+
+            {/* SVG prodotto */}
+            <div style={{ position:'absolute', top:0, left:0, width:400, height:svgH, zIndex:1, pointerEvents:'none' }}
+              dangerouslySetInnerHTML={{ __html: svgContent }} />
+
+            {/* Zona stampa tratteggiata */}
+            {/* Zona tratteggiata — id per toggle DOM diretto senza re-render */}
+            <div id="print-zone-outline" style={{ position:'absolute', top:zone.top, left:zone.left,
+              width:zone.width, height:zone.height,
+              border:'1.5px dashed rgba(63,199,186,0.55)',
+              borderRadius:4, zIndex:3, pointerEvents:'none',
+              background:'rgba(63,199,186,0.03)',
+              transition:'opacity 0.2s' }}>
+              <div style={{ position:'absolute', bottom:-16, left:0, fontSize:9, whiteSpace:'nowrap',
+                color:'rgba(63,199,186,0.7)', fontWeight:600 }}>
+                Zona stampa {zone.width}×{zone.height}px
+              </div>
+            </div>
+
+            {/* Preview mask — gestita tramite clip-path sul canvas stage (vedi sotto) */}
+
+            {/* Fabric canvas */}
+            <canvas id="main-canvas" style={{
+              position:'absolute', top:0, left:0, zIndex:2, width:400, height:svgH,
+            }} />
+
+            {/* Preview mask — gestita fuori dallo stage per evitare problemi di scaling */}
+          </div>
+
+          {/* Bottone Preview — toggle DOM diretto, nessun re-render React */}
+          {!isMobile && (
+            <div style={{ position:'absolute', bottom:58, right:16, zIndex:10,
+              display:'flex', flexDirection:'column', alignItems:'center', gap:2 }}>
+              <button id="preview-btn"
+                onClick={() => {
+                  const zone = document.getElementById('print-zone-outline');
+                  const btn  = document.getElementById('preview-btn');
+                  const lbl  = document.getElementById('preview-lbl');
+                  if (!zone) return;
+                  const isOn = zone.style.opacity === '0';
+                  zone.style.opacity = isOn ? '1' : '0';
+                  if (btn) { btn.style.background = isOn ? 'rgba(255,255,255,0.95)' : '#3fc7ba'; btn.style.color = isOn ? '#666' : '#fff'; }
+                  if (lbl) lbl.textContent = isOn ? 'Preview' : 'Preview ON';
+                }}
+                style={{ width:40, height:40, borderRadius:'50%', border:'none', cursor:'pointer',
+                  background:'rgba(255,255,255,0.95)', color:'#666',
+                  boxShadow:'0 2px 10px rgba(0,0,0,0.15)', fontSize:18,
+                  display:'flex', alignItems:'center', justifyContent:'center' }}>
+                👁
+              </button>
+              <span id="preview-lbl" style={{ fontSize:9, color:'#888', whiteSpace:'nowrap' }}>Preview</span>
+            </div>
+          )}
+
+          {/* Side tabs — solo desktop/tablet (floating) */}
+          {!isMobile && (
+            <div style={{ position:'absolute', bottom:16, left:'50%', transform:'translateX(-50%)',
+              display:'flex', gap:4, background:'rgba(255,255,255,0.96)', borderRadius:24,
+              padding:'5px 8px', boxShadow:'0 2px 12px rgba(0,0,0,0.1)', zIndex:5 }}>
+              {currentProduct?.sides.map((side, i) => (
+                <button key={i} onClick={() => switchSide(product, i)}
+                  style={{ padding:'5px 14px', borderRadius:16, border:'none', cursor:'pointer',
+                    fontSize:12, fontWeight:500,
+                    background: sideIndex===i ? '#3fc7ba' : 'transparent',
+                    color: sideIndex===i ? '#fff' : '#666', transition:'all 0.18s' }}>
+                  {side}
+                </button>
+              ))}
+            </div>
+          )}
+
+          <LayersPanel visible={showLayers} />
+          <BottomToolbar />
+
+          {/* Preview Mask — gestita rimosso */}
+
+          {/* ── Slider zoom verticale — solo mobile, overlay destra ── */}
+          {isMobile && (
+            <div style={{
+              position: 'fixed',
+              right: 8,
+              top: '50%',
+              transform: 'translateY(-50%)',
+              zIndex: 90,
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'center',
+              gap: 6,
+              background: 'rgba(30,32,48,0.85)',
+              borderRadius: 20,
+              padding: '10px 6px',
+              backdropFilter: 'blur(8px)',
+              boxShadow: '0 2px 12px rgba(0,0,0,0.25)',
+            }}>
+              {/* Icona lente */}
+              <span style={{ fontSize: 16, userSelect: 'none' }}>🔍</span>
+              {/* Bottone + */}
+              <button
+                onClick={() => setZoom(z => Math.min(200, z + 10))}
+                style={{ background: 'rgba(255,255,255,0.1)', border: '1px solid rgba(255,255,255,0.2)',
+                  color: '#fff', borderRadius: 8, width: 28, height: 28, cursor: 'pointer',
+                  fontSize: 16, lineHeight: 1, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                +
+              </button>
+              {/* Slider verticale */}
+              <div style={{ position: 'relative', height: 120, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <input
+                  type="range"
+                  min={100} max={200}
+                  value={Math.round(zoom)}
+                  onChange={e => setZoom(+e.target.value)}
+                  style={{
+                    writingMode: 'vertical-lr',
+                    direction: 'rtl',
+                    appearance: 'slider-vertical',
+                    WebkitAppearance: 'slider-vertical',
+                    width: 28,
+                    height: 110,
+                    accentColor: '#3fc7ba',
+                    cursor: 'pointer',
+                  }}
+                />
+              </div>
+              {/* Bottone – */}
+              <button
+                onClick={() => setZoom(z => Math.max(100, z - 10))}
+                style={{ background: 'rgba(255,255,255,0.1)', border: '1px solid rgba(255,255,255,0.2)',
+                  color: '#fff', borderRadius: 8, width: 28, height: 28, cursor: 'pointer',
+                  fontSize: 16, lineHeight: 1, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                –
+              </button>
+              {/* Percentuale */}
+              <span style={{ fontSize: 9, color: 'rgba(255,255,255,0.6)', fontFamily: 'inherit' }}>
+                {Math.round(zoom)}%
+              </span>
+            </div>
+          )}
+        </div>
+
+        {/* RightPanel rimosso — sostituito da BottomToolbar */}
+      </div>
+
+      {/* ════ BARRE MOBILE IN BASSO ══════════════════════════════ */}
+      {isMobile && (
+        <div style={{ position:'fixed', bottom:0, left:0, right:0, zIndex:100,
+          display:'flex', flexDirection:'column',
+          boxShadow:'0 -2px 16px rgba(0,0,0,0.18)' }}>
+
+          {/* Barra strumenti — icone orizzontali */}
+          <div style={{ background:'#2d3142', display:'flex', alignItems:'center',
+            justifyContent:'space-around', padding:'6px 4px', height:56 }}>
+            {[
+              { id:'prodotto', label:'Prodotto', icon:'📦' },
+              { id:'text',     label:'Testo',    icon:'𝐓'  },
+              { id:'upload',   label:'Upload',   icon:'↑'  },
+              { id:'clipart',  label:'Clipart',  icon:'★'  },
+              { id:'shapes',   label:'Forme',    icon:'◼'  },
+              { id:'ai',       label:'AI',       icon:'✨' },
+            ].map(t => (
+              <button key={t.id}
+                onClick={() => setMobileActiveTab(prev => prev === t.id ? null : t.id)}
+                style={{ background: mobileActiveTab===t.id ? 'rgba(63,199,186,0.2)' : 'none',
+                  border:'none', cursor:'pointer', color: mobileActiveTab===t.id ? '#3fc7ba' : '#8892b0',
+                  display:'flex', flexDirection:'column', alignItems:'center', gap:2,
+                  padding:'4px 6px', borderRadius:8, minWidth:44,
+                  borderBottom: mobileActiveTab===t.id ? '2px solid #3fc7ba' : '2px solid transparent',
+                  transition:'all 0.15s' }}>
+                <span style={{ fontSize:18 }}>{t.icon}</span>
+                <span style={{ fontSize:8, fontFamily:'inherit' }}>{t.label}</span>
+              </button>
+            ))}
+          </div>
+
+          {/* Barra lato + preview — una riga pulita */}
+          <div style={{ background:'#1e2030', display:'flex', alignItems:'center',
+            justifyContent:'center', gap:4, padding:'5px 8px', height:44, overflowX:'auto' }}>
+            {currentProduct?.sides.map((side, i) => (
+              <button key={i} onClick={() => switchSide(product, i)}
+                style={{ padding:'4px 11px', borderRadius:16, border:'none', cursor:'pointer',
+                  fontSize:11, fontWeight:500, whiteSpace:'nowrap',
+                  background: sideIndex===i ? '#3fc7ba' : 'rgba(255,255,255,0.08)',
+                  color: sideIndex===i ? '#fff' : '#8892b0',
+                  fontFamily:'inherit', transition:'all 0.18s', flexShrink:0 }}>
+                {side}
+              </button>
+            ))}
+            <div style={{ width:1, height:20, background:'rgba(255,255,255,0.1)', flexShrink:0 }} />
+            <button id="preview-btn-mob"
+              onClick={() => {
+                const z = document.getElementById('print-zone-outline');
+                const b = document.getElementById('preview-btn-mob');
+                if (!z) return;
+                const on = z.style.opacity === '0';
+                z.style.opacity = on ? '1' : '0';
+                if (b) { b.style.background = on ? 'rgba(255,255,255,0.08)' : '#3fc7ba'; b.style.color = on ? '#8892b0' : '#fff'; b.textContent = on ? '👁' : '✓'; }
+              }}
+              style={{ background:'rgba(255,255,255,0.08)', border:'none', color:'#8892b0',
+                borderRadius:8, padding:'4px 10px', cursor:'pointer', fontSize:13,
+                fontFamily:'inherit', flexShrink:0 }}>👁
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Drawer strumenti mobile */}
+      {isMobile && (
+        <MobileToolDrawer
+          activeTab={mobileActiveTab}
+          onClose={() => setMobileActiveTab(null)}
+          onAddElement={addElement}
+          products={PRODUCTS}
+          currentProduct={product}
+          onProductChange={id => switchSide(id, 0)}
+        />
+      )}
+
+      {/* ── Password modal ──────────────────────────────────────── */}
+      {showPwdModal && (
+        <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.55)', zIndex:1000,
+          display:'flex', alignItems:'center', justifyContent:'center' }}
+          onClick={() => setShowPwdModal(false)}>
+          <div style={{ background:'#fff', borderRadius:14, padding:'28px 28px 24px',
+            width: isMobile ? 'calc(100vw - 40px)' : 320,
+            boxShadow:'0 12px 40px rgba(0,0,0,0.25)', animation:'fadeIn 0.15s ease' }}
+            onClick={e => e.stopPropagation()}>
+            <div style={{ textAlign:'center', marginBottom:18 }}>
+              <div style={{ fontSize:36, marginBottom:8 }}>🔒</div>
+              <div style={{ fontWeight:700, fontSize:16, color:'#2d3142' }}>Accesso Admin</div>
+              <div style={{ fontSize:12, color:'#888', marginTop:4, lineHeight:1.5 }}>
+                Il download è riservato agli amministratori.<br />Inserisci la password per continuare.
+              </div>
+            </div>
+            <input type="password" autoFocus value={pwdInput}
+              onChange={e => { setPwdInput(e.target.value); setPwdError(false); }}
+              onKeyDown={e => e.key === 'Enter' && checkPassword()}
+              placeholder="Password admin..."
+              style={{ width:'100%', padding:'10px 14px',
+                border:`1.5px solid ${pwdError ? '#e74c3c' : '#e0e0e0'}`,
+                borderRadius:8, fontSize:14, fontFamily:'inherit', boxSizing:'border-box',
+                outline:'none', marginBottom:6, background: pwdError ? '#fff5f5' : '#fafafa' }} />
+            {pwdError && (
+              <div style={{ fontSize:12, color:'#e74c3c', marginBottom:8, textAlign:'center' }}>
+                ❌ Password errata. Riprova.
+              </div>
+            )}
+            <div style={{ display:'flex', gap:8, marginTop:10 }}>
+              <button onClick={() => setShowPwdModal(false)}
+                style={{ flex:1, padding:'9px', border:'1px solid #e0e0e0', borderRadius:8,
+                  background:'#f5f5f5', cursor:'pointer', fontSize:13, fontFamily:'inherit', color:'#666' }}>
+                Annulla
+              </button>
+              <button onClick={checkPassword}
+                style={{ flex:2, padding:'9px', border:'none', borderRadius:8,
+                  background:'linear-gradient(135deg,#3fc7ba,#2db5a8)', color:'#fff',
+                  cursor:'pointer', fontSize:13, fontWeight:700, fontFamily:'inherit' }}>
+                Conferma ↓
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>);
+
+}
+
+// Mount gestito dal Routert gestito dal Router
+
+
+// ═══════════════════════════════════════════════════════════════
+// ADMIN PANEL APP
+// ═══════════════════════════════════════════════════════════════
+
+// hooks già dichiarati sopra
+
+// ── Auth gate ──────────────────────────────────────────────────
+const ADMIN_PWD = 'wonderspit2025';
+
+// ── Shared UI ──────────────────────────────────────────────────
+const card = { background:'#fff', borderRadius:12, boxShadow:'0 1px 4px rgba(0,0,0,0.08)', padding:'20px 24px', marginBottom:16 };
+const label = { display:'block', fontSize:11, fontWeight:700, color:'#888', textTransform:'uppercase', letterSpacing:0.5, marginBottom:4 };
+const inp = { width:'100%', padding:'8px 12px', border:'1px solid #e0e0e0', borderRadius:7, fontSize:13, background:'#fafafa', boxSizing:'border-box', outline:'none' };
+const btn = (color='#3fc7ba') => ({ padding:'8px 18px', background:color, color:'#fff', border:'none', borderRadius:7, cursor:'pointer', fontSize:13, fontWeight:600, fontFamily:'inherit' });
+const ghost = { padding:'7px 14px', background:'#f5f5f5', color:'#555', border:'1px solid #e0e0e0', borderRadius:7, cursor:'pointer', fontSize:12, fontFamily:'inherit' };
+
+function Tag({ children, onRemove, color='#3fc7ba' }) {
+  return (
+    <span style={{ display:'inline-flex', alignItems:'center', gap:4, background:`${color}18`, color, borderRadius:20,
+      padding:'3px 10px', fontSize:12, fontWeight:600, margin:'2px' }}>
+      {children}
+      {onRemove && <span onClick={onRemove} style={{ cursor:'pointer', marginLeft:2, opacity:0.7 }}>✕</span>}
+    </span>
+  );
+}
+
+function Toast({ msg, onDone }) {
+  useEffect(() => { if (msg) { const t = setTimeout(onDone, 2200); return () => clearTimeout(t); } }, [msg]);
+  if (!msg) return null;
+  return (
+    <div style={{ position:'fixed', bottom:24, right:24, background:'#2d3142', color:'#fff', borderRadius:10,
+      padding:'12px 20px', fontSize:13, fontWeight:600, boxShadow:'0 4px 16px rgba(0,0,0,0.2)', zIndex:999, animation:'fadeIn 0.2s ease' }}>
+      ✅ {msg}
+    </div>
+  );
+}
+
+// ── NAV ───────────────────────────────────────────────────────
+const NAV = [
+  { id:'products',  label:'Prodotti',     icon:'📦' },
+  { id:'cliparts',  label:'Clipart',      icon:'★'  },
+  { id:'templates', label:'Template',     icon:'⊞'  },
+  { id:'fonts',     label:'Font',         icon:'𝐓'  },
+  { id:'ai',        label:'AI Config',    icon:'✨' },
+  { id:'images',    label:'Immagini',     icon:'🖼'  },
+];
+
+// ── PRODUCTS TAB ───────────────────────────────────────────────
+function ProductsTab({ toast }) {
+  const [products, setProducts] = useState(() => AdminStore.get('products'));
+  const [editing, setEditing] = useState(null);
+  const [newColor, setNewColor] = useState('#ffffff');
+
+  const save = (updated) => { const p = products.map(x => x.id===updated.id ? updated : x); setProducts(p); AdminStore.set('products', p); toast('Salvato!'); };
+  const addColor = (p) => { if (!p.colors.includes(newColor)) save({...p, colors:[...p.colors, newColor]}); };
+  const removeColor = (p, c) => save({...p, colors:p.colors.filter(x=>x!==c)});
+  const updateZone = (p, field, val) => save({...p, printZone:{...p.printZone, [field]: parseInt(val)||0}});
+
+  return (
+    <div>
+      <h2 style={{ fontSize:18, fontWeight:700, marginBottom:16, color:'#2d3142' }}>Gestione Prodotti</h2>
+      {products.map(p => (
+        <div key={p.id} style={card}>
+          <div style={{ display:'flex', alignItems:'center', gap:10, marginBottom:12 }}>
+            <span style={{ fontSize:26 }}>{p.icon}</span>
+            <div style={{ flex:1 }}>
+              <div style={{ fontWeight:700, fontSize:15 }}>{p.name}</div>
+              <div style={{ fontSize:11, color:'#888' }}>{p.sides.join(' · ')}</div>
+            </div>
+            <button onClick={() => setEditing(editing===p.id ? null : p.id)} style={ghost}>
+              {editing===p.id ? '▲ Chiudi' : '✏️ Modifica'}
+            </button>
+          </div>
+
+          {editing===p.id && (
+            <div style={{ animation:'fadeIn 0.15s ease' }}>
+              <hr style={{ border:'none', borderTop:'1px solid #f0f0f0', marginBottom:14 }} />
+
+              {/* Print zone */}
+              <div style={{ marginBottom:14 }}>
+                <div style={{ fontWeight:600, fontSize:13, marginBottom:8, color:'#555' }}>Zona di Stampa (px)</div>
+                <div style={{ display:'grid', gridTemplateColumns:'repeat(4,1fr)', gap:8 }}>
+                  {['left','top','width','height'].map(f => (
+                    <div key={f}>
+                      <label style={label}>{f}</label>
+                      <input type="number" value={p.printZone[f]} onChange={e => updateZone(p,f,e.target.value)} style={inp} />
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Colors */}
+              <div>
+                <div style={{ fontWeight:600, fontSize:13, marginBottom:8, color:'#555' }}>Colori Disponibili</div>
+                <div style={{ display:'flex', flexWrap:'wrap', gap:4, marginBottom:8 }}>
+                  {p.colors.map(c => (
+                    <div key={c} style={{ display:'flex', alignItems:'center', gap:4, background:'#f5f5f5', borderRadius:20, padding:'3px 8px 3px 4px' }}>
+                      <div style={{ width:16, height:16, borderRadius:'50%', background:c, border:'1px solid #ddd' }} />
+                      <span style={{ fontSize:11, color:'#555' }}>{c}</span>
+                      <span onClick={() => removeColor(p,c)} style={{ cursor:'pointer', color:'#e74c3c', fontSize:12, marginLeft:2 }}>✕</span>
+                    </div>
+                  ))}
+                </div>
+                <div style={{ display:'flex', gap:8, alignItems:'center' }}>
+                  <input type="color" value={newColor} onChange={e => setNewColor(e.target.value)}
+                    style={{ width:36, height:36, padding:2, border:'1px solid #ddd', borderRadius:6, cursor:'pointer' }} />
+                  <button onClick={() => addColor(p)} style={btn()}>+ Aggiungi colore</button>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// ── CLIPARTS TAB ──────────────────────────────────────────────
+function ClipartsTab({ toast }) {
+  const [cliparts, setCliparts] = useState(() => AdminStore.get('cliparts'));
+  const [newLabel, setNewLabel] = useState('');
+  const [newSvg, setNewSvg] = useState('');
+  const fileRef = useRef();
+
+  const save = (list) => { setCliparts(list); AdminStore.set('cliparts', list); toast('Salvato!'); };
+  const remove = (id) => save(cliparts.filter(c => c.id !== id));
+  const addManual = () => {
+    if (!newLabel.trim() || !newSvg.trim()) return;
+    save([...cliparts, { id: Date.now().toString(), label: newLabel, svg: newSvg }]);
+    setNewLabel(''); setNewSvg('');
+  };
+  const handleSvgFile = (file) => {
+    const r = new FileReader();
+    r.onload = e => {
+      const content = e.target.result;
+      const inner = content.replace(/<\?xml[^>]*\?>/g,'').replace(/<svg[^>]*>/g,'').replace(/<\/svg>/g,'').trim();
+      setNewSvg(inner);
+      if (!newLabel) setNewLabel(file.name.replace('.svg',''));
+    };
+    r.readAsText(file);
+  };
+
+  return (
+    <div>
+      <h2 style={{ fontSize:18, fontWeight:700, marginBottom:16 }}>Gestione Clipart</h2>
+
+      {/* Add new */}
+      <div style={card}>
+        <div style={{ fontWeight:600, fontSize:14, marginBottom:14 }}>➕ Aggiungi Clipart</div>
+        <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:12, marginBottom:12 }}>
+          <div>
+            <label style={label}>Nome</label>
+            <input value={newLabel} onChange={e => setNewLabel(e.target.value)} placeholder="Es: Fiamma" style={inp} />
+          </div>
+          <div>
+            <label style={label}>Carica SVG</label>
+            <button onClick={() => fileRef.current.click()} style={ghost}>📁 Scegli file SVG...</button>
+            <input ref={fileRef} type="file" accept=".svg" style={{ display:'none' }} onChange={e => handleSvgFile(e.target.files[0])} />
+          </div>
+        </div>
+        <label style={label}>Inner SVG (path/polygon del simbolo, senza tag svg)</label>
+        <textarea value={newSvg} onChange={e => setNewSvg(e.target.value)} rows={3}
+          placeholder='<path d="M..." fill="currentColor"/>'
+          style={{ ...inp, resize:'vertical', marginBottom:12 }} />
+        {newSvg && (
+          <div style={{ marginBottom:12, display:'flex', alignItems:'center', gap:8 }}>
+            <span style={{ fontSize:11, color:'#888' }}>Anteprima:</span>
+            <svg viewBox="0 0 24 24" width={40} height={40} style={{ color:'#3fc7ba', border:'1px solid #eee', borderRadius:6, padding:4 }}
+              dangerouslySetInnerHTML={{ __html: newSvg }} />
+          </div>
+        )}
+        <button onClick={addManual} style={btn()}>+ Aggiungi</button>
+      </div>
+
+      {/* List */}
+      <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill,minmax(100px,1fr))', gap:10 }}>
+        {cliparts.map(c => (
+          <div key={c.id} style={{ ...card, padding:12, textAlign:'center', position:'relative', marginBottom:0 }}>
+            <svg viewBox="0 0 24 24" width={36} height={36} style={{ color:'#3fc7ba' }} dangerouslySetInnerHTML={{ __html: c.svg }} />
+            <div style={{ fontSize:11, color:'#555', marginTop:4, fontWeight:500 }}>{c.label}</div>
+            <button onClick={() => remove(c.id)}
+              style={{ position:'absolute', top:4, right:4, background:'none', border:'none', cursor:'pointer', color:'#e74c3c', fontSize:12 }}>✕</button>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ── TEMPLATES TAB ─────────────────────────────────────────────
+function TemplatesTab({ toast }) {
+  const [templates, setTemplates] = useState(() => AdminStore.get('templates'));
+  const [form, setForm] = useState({ name:'', bg:'#ffffff', texts:[''], colors:['#000000'] });
+
+  const save = (list) => { setTemplates(list); AdminStore.set('templates', list); toast('Salvato!'); };
+  const remove = (id) => save(templates.filter(t => t.id !== id));
+  const add = () => {
+    if (!form.name.trim()) return;
+    save([...templates, { ...form, id: Date.now().toString() }]);
+    setForm({ name:'', bg:'#ffffff', texts:[''], colors:['#000000'] });
+  };
+  const setTexts = (i, v) => { const t=[...form.texts]; t[i]=v; setForm({...form,texts:t}); };
+  const setColors = (i, v) => { const c=[...form.colors]; c[i]=v; setForm({...form,colors:c}); };
+
+  return (
+    <div>
+      <h2 style={{ fontSize:18, fontWeight:700, marginBottom:16 }}>Gestione Template</h2>
+      <div style={card}>
+        <div style={{ fontWeight:600, fontSize:14, marginBottom:14 }}>➕ Nuovo Template</div>
+        <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:12, marginBottom:12 }}>
+          <div><label style={label}>Nome</label><input value={form.name} onChange={e=>setForm({...form,name:e.target.value})} style={inp} /></div>
+          <div><label style={label}>Sfondo</label><input type="color" value={form.bg} onChange={e=>setForm({...form,bg:e.target.value})} style={{...inp,padding:2,height:38}} /></div>
+        </div>
+        {form.texts.map((t,i) => (
+          <div key={i} style={{ display:'grid', gridTemplateColumns:'1fr auto', gap:8, marginBottom:8 }}>
+            <div style={{ display:'grid', gridTemplateColumns:'1fr auto', gap:6 }}>
+              <div><label style={label}>Testo {i+1}</label><input value={t} onChange={e=>setTexts(i,e.target.value)} style={inp} /></div>
+              <div><label style={label}>Colore</label><input type="color" value={form.colors[i]||'#000000'} onChange={e=>setColors(i,e.target.value)} style={{...inp,padding:2,height:38,width:50}} /></div>
+            </div>
+            <button onClick={()=>{const tx=form.texts.filter((_,j)=>j!==i);const cl=form.colors.filter((_,j)=>j!==i);setForm({...form,texts:tx,colors:cl});}} style={{alignSelf:'flex-end',...ghost,padding:'8px'}}>✕</button>
+          </div>
+        ))}
+        <button onClick={()=>setForm({...form,texts:[...form.texts,''],colors:[...form.colors,'#000000']})} style={{...ghost,marginBottom:12}}>+ Testo</button><br/>
+        <button onClick={add} style={btn()}>Aggiungi Template</button>
+      </div>
+
+      <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill,minmax(160px,1fr))', gap:10 }}>
+        {templates.map(t => (
+          <div key={t.id} style={{ background:t.bg, borderRadius:10, padding:14, border:'2px solid #e0e0e0', position:'relative', minHeight:80 }}>
+            {t.texts.map((txt,i) => (
+              <div key={i} style={{ color:t.colors[i%t.colors.length], fontWeight:'bold', fontSize:i===0?13:10, marginBottom:2 }}>{txt}</div>
+            ))}
+            <div style={{ position:'absolute', top:6, right:6, fontSize:10, background:'rgba(255,255,255,0.8)', borderRadius:10, padding:'2px 6px', color:'#555' }}>{t.name}</div>
+            <button onClick={()=>remove(t.id)} style={{ position:'absolute', bottom:6, right:6, background:'rgba(231,76,60,0.15)', border:'none', color:'#e74c3c', borderRadius:5, padding:'2px 8px', cursor:'pointer', fontSize:11 }}>✕</button>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ── FONTS TAB ─────────────────────────────────────────────────
+function FontsTab({ toast }) {
+  const [fonts, setFonts] = useState(() => AdminStore.get('fonts'));
+  const [search, setSearch] = useState('');
+  const [results, setResults] = useState([]);
+  const [loading, setLoading] = useState(false);
+
+  const save = (list) => { setFonts(list); AdminStore.set('fonts', list); toast('Font salvati!'); };
+  const removeFont = (f) => save(fonts.filter(x => x !== f));
+  const addFont = (f) => { if (!fonts.includes(f)) { save([...fonts, f]); loadGoogleFont(f); } };
+
+  const loadGoogleFont = (name) => {
+    const link = document.createElement('link');
+    link.href = `https://fonts.googleapis.com/css2?family=${name.replace(/ /g,'+')}:wght@400;600;700&display=swap`;
+    link.rel = 'stylesheet';
+    document.head.appendChild(link);
+  };
+
+  const searchFonts = async () => {
+    if (!search.trim()) return;
+    setLoading(true); setResults([]);
+    try {
+      const res = await fetch(`https://www.googleapis.com/webfonts/v1/webfonts?key=AIzaSyDummy&family=${encodeURIComponent(search)}`);
+      // Fallback: use a curated list
+      const curated = ['Roboto','Open Sans','Lato','Montserrat','Oswald','Raleway','Merriweather','Playfair Display','Nunito','Poppins','Ubuntu','PT Serif','Dancing Script','Pacifico','Lobster','Bebas Neue','Anton','Fjalla One','Righteous','Permanent Marker','Special Elite','Creepster','Bangers','Press Start 2P','VT323','Architects Daughter'];
+      const filtered = curated.filter(f => f.toLowerCase().includes(search.toLowerCase()));
+      setResults(filtered.slice(0, 12));
+      filtered.forEach(loadGoogleFont);
+    } catch { setResults([]); }
+    setLoading(false);
+  };
+
+  return (
+    <div>
+      <h2 style={{ fontSize:18, fontWeight:700, marginBottom:16 }}>Gestione Font</h2>
+      <div style={card}>
+        <div style={{ fontWeight:600, fontSize:14, marginBottom:12 }}>Font attivi nel designer</div>
+        <div style={{ display:'flex', flexWrap:'wrap', gap:6, marginBottom:12 }}>
+          {fonts.map(f => (
+            <Tag key={f} onRemove={() => removeFont(f)}><span style={{ fontFamily:f }}>{f}</span></Tag>
+          ))}
+        </div>
+      </div>
+      <div style={card}>
+        <div style={{ fontWeight:600, fontSize:14, marginBottom:12 }}>🔍 Cerca Google Fonts</div>
+        <div style={{ display:'flex', gap:8, marginBottom:12 }}>
+          <input value={search} onChange={e => setSearch(e.target.value)} onKeyDown={e => e.key==='Enter' && searchFonts()}
+            placeholder="Es: Roboto, Pacifico, Bangers..." style={{ ...inp, flex:1 }} />
+          <button onClick={searchFonts} style={btn()}>{loading ? '⏳' : '🔍 Cerca'}</button>
+        </div>
+        {results.length > 0 && (
+          <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill,minmax(160px,1fr))', gap:8 }}>
+            {results.map(f => (
+              <div key={f} style={{ border:'1px solid #e0e0e0', borderRadius:8, padding:10, display:'flex', flexDirection:'column', gap:6 }}>
+                <div style={{ fontFamily:f, fontSize:18, color:'#2d3142' }}>Aa</div>
+                <div style={{ fontSize:11, color:'#888', fontWeight:600 }}>{f}</div>
+                <button onClick={() => addFont(f)}
+                  style={{ ...btn(fonts.includes(f)?'#aaa':'#3fc7ba'), padding:'4px 10px', fontSize:11 }}>
+                  {fonts.includes(f) ? '✓ Aggiunto' : '+ Aggiungi'}
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ── AI CONFIG TAB ──────────────────────────────────────────────
+function AIConfigTab({ toast }) {
+  const [cfg, setCfg] = useState(() => AdminStore.get('aiConfig'));
+  const services = {
+    pollinations: { name:'Pollinations.ai (Gratuito)', placeholder:'Nessuna API key richiesta', free:true },
+    openai:       { name:'OpenAI DALL·E 3',             placeholder:'sk-...', free:false },
+    stability:    { name:'Stability AI',                placeholder:'sk-...', free:false },
+    replicate:    { name:'Replicate',                   placeholder:'r8_...', free:false },
+  };
+
+  const save = () => { AdminStore.set('aiConfig', cfg); window.AIConfig = {...window.AIConfig, ...cfg}; toast('Configurazione AI salvata!'); };
+
+  return (
+    <div>
+      <h2 style={{ fontSize:18, fontWeight:700, marginBottom:16 }}>Configurazione AI (solo admin)</h2>
+      <div style={card}>
+        <div style={{ background:'#fff8e1', border:'1px solid #ffe082', borderRadius:8, padding:'10px 14px', marginBottom:16, fontSize:12, color:'#795548' }}>
+          🔒 Questa sezione è accessibile solo tramite login admin. Le API key sono sensibili — non condividere.
+        </div>
+        <label style={label}>Servizio AI attivo</label>
+        <select value={cfg.service} onChange={e => setCfg({...cfg, service:e.target.value})}
+          style={{ ...inp, marginBottom:16 }}>
+          {Object.entries(services).map(([k,v]) => (
+            <option key={k} value={k}>{v.name}</option>
+          ))}
+        </select>
+
+        {!services[cfg.service]?.free && (
+          <>
+            <label style={label}>API Key — {services[cfg.service]?.name}</label>
+            <input type="password" value={cfg.apiKey} onChange={e => setCfg({...cfg, apiKey:e.target.value})}
+              placeholder={services[cfg.service]?.placeholder} style={{ ...inp, marginBottom:16 }} />
+          </>
+        )}
+        {services[cfg.service]?.free && (
+          <div style={{ background:'#e8f8f5', borderRadius:8, padding:'10px 14px', marginBottom:16, fontSize:12, color:'#27ae60' }}>
+            ✅ Pollinations.ai è gratuito e non richiede API key — ideale per sviluppo e test.
+          </div>
+        )}
+        <button onClick={save} style={btn()}>💾 Salva configurazione</button>
+      </div>
+    </div>
+  );
+}
+
+// ── IMAGE SETTINGS TAB ────────────────────────────────────────
+function ImageSettingsTab({ toast }) {
+  const [cfg, setCfg] = useState(() => AdminStore.get('imageSettings'));
+
+  const save = () => { AdminStore.set('imageSettings', cfg); toast('Impostazioni immagini salvate!'); };
+
+  return (
+    <div>
+      <h2 style={{ fontSize:18, fontWeight:700, marginBottom:16 }}>Impostazioni Immagini</h2>
+      <div style={card}>
+        <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:16, marginBottom:16 }}>
+          <div>
+            <label style={label}>Dimensione massima upload (MB)</label>
+            <input type="number" value={cfg.maxMB} onChange={e => setCfg({...cfg, maxMB:+e.target.value})} min={0.1} max={50} step={0.5} style={inp} />
+            <div style={{ fontSize:11, color:'#aaa', marginTop:4 }}>File più grandi verranno rifiutati</div>
+          </div>
+          <div>
+            <label style={label}>Dimensione minima upload (KB)</label>
+            <input type="number" value={cfg.minKB} onChange={e => setCfg({...cfg, minKB:+e.target.value})} min={1} max={500} style={inp} />
+            <div style={{ fontSize:11, color:'#aaa', marginTop:4 }}>File più piccoli potrebbero essere di bassa qualità</div>
+          </div>
+        </div>
+        <div>
+          <label style={label}>Soglia degradazione (scala max prima dell'avviso)</label>
+          <input type="number" value={cfg.degradeWarnScale} onChange={e => setCfg({...cfg, degradeWarnScale:+e.target.value})}
+            min={1} max={10} step={0.5} style={{ ...inp, marginBottom:8 }} />
+          <div style={{ fontSize:11, color:'#aaa', marginBottom:16 }}>
+            Es: 2.5 = avviso se l'immagine viene scalata oltre il 250% della dimensione originale.<br/>
+            La cornice diventa rossa e appare un avviso visivo nel canvas.
+          </div>
+        </div>
+        <div style={{ background:'#fff3cd', border:'1px solid #ffc107', borderRadius:8, padding:'10px 14px', marginBottom:16, fontSize:12, color:'#856404' }}>
+          ⚠️ Queste soglie vengono applicate in tempo reale nel designer. L'utente vedrà avvisi visivi quando le immagini vengono ridimensionate oltre la soglia impostata.
+        </div>
+        <button onClick={save} style={btn()}>💾 Salva impostazioni</button>
+      </div>
+    </div>
+  );
+}
+
+// ── LOGIN GATE ────────────────────────────────────────────────
+function LoginGate({ onLogin }) {
+  const [pwd, setPwd] = useState('');
+  const [err, setErr] = useState(false);
+  const check = () => { if (pwd === ADMIN_PWD) onLogin(); else setErr(true); };
+  return (
+    <div style={{ minHeight:'100vh', display:'flex', alignItems:'center', justifyContent:'center', background:'#f0f2f5' }}>
+      <div style={{ background:'#fff', borderRadius:16, padding:'36px 32px', width:340, boxShadow:'0 8px 32px rgba(0,0,0,0.12)', textAlign:'center' }}>
+        <div style={{ fontSize:48, marginBottom:12 }}>🔒</div>
+        <div style={{ fontWeight:800, fontSize:20, color:'#2d3142', marginBottom:4 }}>Admin Panel</div>
+        <div style={{ color:'#888', fontSize:13, marginBottom:24 }}>WonderSpit Product Designer</div>
+        <input type="password" value={pwd} onChange={e=>{setPwd(e.target.value);setErr(false);}}
+          onKeyDown={e=>e.key==='Enter'&&check()}
+          placeholder="Password admin..." autoFocus
+          style={{ ...inp, marginBottom:8, textAlign:'center', border:`1.5px solid ${err?'#e74c3c':'#e0e0e0'}`, background:err?'#fff5f5':'#fafafa' }} />
+        {err && <div style={{ color:'#e74c3c', fontSize:12, marginBottom:8 }}>Password errata</div>}
+        <button onClick={check} style={{ ...btn(), width:'100%', padding:'11px' }}>Accedi</button>
+        <div style={{ marginTop:16, fontSize:11, color:'#bbb' }}>
+          <a href="#" style={{ color:'#3fc7ba' }}>← Torna al Designer</a>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── ROOT APP ──────────────────────────────────────────────────
+function AdminApp() {
+  const [authed, setAuthed] = useState(false);
+  const [tab, setTab] = useState('products');
+  const [toastMsg, setToastMsg] = useState('');
+
+  const toast = (msg) => setToastMsg(msg);
+
+  if (!authed) return <LoginGate onLogin={() => setAuthed(true)} />;
+
+  return (
+    <div style={{ display:'flex', minHeight:'100vh' }}>
+      {/* Sidebar */}
+      <div style={{ width:220, background:'#2d3142', display:'flex', flexDirection:'column', flexShrink:0 }}>
+        <div style={{ padding:'20px 20px 16px', borderBottom:'1px solid rgba(255,255,255,0.08)' }}>
+          <div style={{ fontWeight:800, fontSize:16, color:'#fff' }}>WonderSpit</div>
+          <div style={{ fontSize:11, color:'#8892b0' }}>Admin Panel</div>
+        </div>
+        <nav style={{ padding:10, flex:1 }}>
+          {NAV.map(n => (
+            <button key={n.id} onClick={() => setTab(n.id)}
+              style={{ width:'100%', padding:'9px 14px', background:tab===n.id?'rgba(63,199,186,0.18)':'none',
+                border:'none', borderRadius:7, cursor:'pointer', color:tab===n.id?'#3fc7ba':'#8892b0',
+                fontFamily:'inherit', fontSize:13, fontWeight:tab===n.id?600:400,
+                display:'flex', alignItems:'center', gap:10, marginBottom:2,
+                borderLeft:tab===n.id?'3px solid #3fc7ba':'3px solid transparent', transition:'all 0.15s' }}>
+              <span>{n.icon}</span> {n.label}
+            </button>
+          ))}
+        </nav>
+        <div style={{ padding:'14px 20px', borderTop:'1px solid rgba(255,255,255,0.08)' }}>
+          <a href="#"
+            style={{ fontSize:12, color:'#8892b0', textDecoration:'none', display:'flex', alignItems:'center', gap:6 }}>
+            ← Torna al Designer
+          </a>
+        </div>
+      </div>
+
+      {/* Content */}
+      <div style={{ flex:1, padding:'28px 32px', overflowY:'auto', maxWidth:900 }}>
+        {tab === 'products'  && <ProductsTab toast={toast} />}
+        {tab === 'cliparts'  && <ClipartsTab toast={toast} />}
+        {tab === 'templates' && <TemplatesTab toast={toast} />}
+        {tab === 'fonts'     && <FontsTab toast={toast} />}
+        {tab === 'ai'        && <AIConfigTab toast={toast} />}
+        {tab === 'images'    && <ImageSettingsTab toast={toast} />}
+      </div>
+
+      <Toast msg={toastMsg} onDone={() => setToastMsg('')} />
+    </div>
+  );
+}
+
+// Mount gestito dal Router
+
+
+// ═══════════════════════════════════════════════════════════════
+// ROUTER — sceglie quale app mostrare in base all'hash URL
+// ═══════════════════════════════════════════════════════════════
+function Router() {
+  const [view, setView] = React.useState(
+    window.location.hash === '#admin' ? 'admin' : 'designer'
+  );
+
+  React.useEffect(() => {
+    const handler = () => {
+      setView(window.location.hash === '#admin' ? 'admin' : 'designer');
+    };
+    window.addEventListener('hashchange', handler);
+    return () => window.removeEventListener('hashchange', handler);
+  }, []);
+
+  React.useEffect(() => {
+    const designerRoot = document.getElementById('root');
+    const adminRoot = document.getElementById('admin-root');
+    if (view === 'designer') {
+      designerRoot.style.display = 'flex';
+      adminRoot.style.display = 'none';
+      document.title = 'WonderSpit – Product Designer';
+      document.body.style.overflow = 'hidden';
+      document.body.style.background = '#ebeced';
+    } else {
+      designerRoot.style.display = 'none';
+      adminRoot.style.display = 'block';
+      document.title = 'WonderSpit – Admin Panel';
+      document.body.style.overflow = 'auto';
+      document.body.style.background = '#f0f2f5';
+    }
+  }, [view]);
+
+  return null;
+}
+
+// Mount del router
+const routerRoot = document.createElement('div');
+document.body.appendChild(routerRoot);
+ReactDOM.createRoot(routerRoot).render(<Router />);
+
+// Mount del designer
+ReactDOM.createRoot(document.getElementById('root')).render(<DesignerApp />);
+
+// Mount dell'admin
+ReactDOM.createRoot(document.getElementById('admin-root')).render(<AdminApp />);
+
+</script>
+
+<script>
+window.addEventListener('message', e => {
+  if (e.data?.type === '__activate_edit_mode') document.getElementById('tweaks-panel')?.style && (document.getElementById('tweaks-panel').style.display = 'block');
+  if (e.data?.type === '__deactivate_edit_mode') document.getElementById('tweaks-panel')?.style && (document.getElementById('tweaks-panel').style.display = 'none');
+});
+window.parent.postMessage({ type: '__edit_mode_available' }, '*');
+</script>
+
+</body>
+</html>
