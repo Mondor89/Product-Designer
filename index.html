@@ -244,10 +244,10 @@ const STYLE_PROMPTS = {
 };
 
 /* ── PRODOTTO PANEL ──────────────────────────────────────────── */
-function ProdottoPanel({ products, currentProduct, onProductChange }) {
+function ProdottoPanel({ products, currentProduct, onProductChange, selectedColor, onColorChange }) {
   const [quantities, setQuantities] = useSt(() => Object.fromEntries(['XS','S','M','L','XL','XXL','XXXL'].map(s => [s, 0])));
   const prod = products.find(p => p.id === currentProduct) || products[0];
-  const SIZES = ['XS','S','M','L','XL','XXL','XXXL'];
+  const SIZES = prod?.taglie?.length ? prod.taglie : ['XS','S','M','L','XL','XXL'];
 
   const setQty = (size, val) => setQuantities(q => ({ ...q, [size]: Math.max(0, Math.min(999, parseInt(val) || 0)) }));
   const adj = (s, d) => setQty(s, quantities[s] + d);
@@ -264,6 +264,21 @@ function ProdottoPanel({ products, currentProduct, onProductChange }) {
             <span style={{ fontSize:11, marginTop:3, fontWeight:currentProduct===p.id?600:400 }}>{p.name}</span>
           </div>
         ))}
+      </div>
+
+      {/* ── Colori prodotto — stile Lumise ── */}
+      <div style={{ marginBottom:16 }}>
+        <div style={lp.sectionTitle}>Colore Prodotto</div>
+        <div style={{ display:'flex', flexWrap:'wrap', gap:6, marginTop:6 }}>
+          {(prod?.colors || []).map(c => (
+            <div key={c} onClick={() => onColorChange(c)}
+              style={{ width:26, height:26, borderRadius:'50%', background:c,
+                cursor:'pointer', flexShrink:0,
+                border: selectedColor===c ? '2px solid #3fc7ba' : '2px solid transparent',
+                boxShadow: selectedColor===c ? '0 0 0 2px rgba(63,199,186,0.4)' : '0 1px 3px rgba(0,0,0,0.2)',
+                transition:'all 0.15s' }} />
+          ))}
+        </div>
       </div>
 
       <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:8 }}>
@@ -783,7 +798,7 @@ const TABS = [
 ];
 
 /* ── MAIN LEFT PANEL ─────────────────────────────────────────── */
-function LeftPanel({ onAddElement, products, currentProduct, onProductChange }) {
+function LeftPanel({ onAddElement, products, currentProduct, onProductChange, productColor, setProductColor }) {
   const [activeTab, setActiveTabRaw] = useSt(null);
   const panelRef = useRf();
 
@@ -830,7 +845,7 @@ function LeftPanel({ onAddElement, products, currentProduct, onProductChange }) 
               style={{ background:'none', border:'none', cursor:'pointer', color:'#bbb', fontSize:16 }}>✕</button>
           </div>
           <div style={{ flex:1, overflowY:'auto' }}>
-            {activeTab==='prodotto'  && <ProdottoPanel products={products} currentProduct={currentProduct} onProductChange={id => { onProductChange(id); setActiveTabRaw(null); }} />}
+            {activeTab==='prodotto'  && <ProdottoPanel products={products} currentProduct={currentProduct} onProductChange={id => { onProductChange(id); setActiveTabRaw(null); }} selectedColor={productColor} onColorChange={setProductColor} />}
             {activeTab==='ai'        && <AIPanel onAdd={onAddElement} />}
             {activeTab==='text'      && <TextPanel onAdd={onAddElement} />}
             {activeTab==='upload'    && <UploadPanel onAdd={onAddElement} />}
@@ -1680,7 +1695,7 @@ function useCanvasBaseScale(bp) {
 }
 
 // ─── MobileToolDrawer — pannello strumenti che sale dal basso ──
-function MobileToolDrawer({ activeTab, onClose, onAddElement, products, currentProduct, onProductChange }) {
+function MobileToolDrawer({ activeTab, onClose, onAddElement, products, currentProduct, onProductChange, productColor, setProductColor }) {
   const { useState: useSt2, useEffect: useEff2 } = React;
   if (!activeTab) return null;
   const TABS2 = [
@@ -1716,7 +1731,7 @@ function MobileToolDrawer({ activeTab, onClose, onAddElement, products, currentP
         </div>
         {/* Contenuto panel */}
         <div style={{ flex:1, overflowY:'auto' }}>
-          {activeTab==='prodotto'  && <ProdottoPanel products={products} currentProduct={currentProduct} onProductChange={id => { onProductChange(id); onClose(); }} />}
+          {activeTab==='prodotto'  && <ProdottoPanel products={products} currentProduct={currentProduct} onProductChange={id => { onProductChange(id); onClose(); }} selectedColor={productColor} onColorChange={setProductColor} />}
           {activeTab==='ai'        && <AIPanel onAdd={onAddElement} />}
           {activeTab==='text'      && <TextPanel onAdd={el => { onAddElement(el); onClose(); }} />}
           {activeTab==='upload'    && <UploadPanel onAdd={el => { onAddElement(el); onClose(); }} />}
@@ -2474,6 +2489,8 @@ function DesignerApp() {
             products={PRODUCTS}
             currentProduct={product}
             onProductChange={id => switchSide(id, 0)}
+            productColor={productColor}
+            setProductColor={setProductColor}
           />
         )}
 
@@ -2484,31 +2501,7 @@ function DesignerApp() {
           paddingTop: isMobile ? 8 : 0,
           paddingBottom: isMobile ? 110 : 0 }}>
 
-          {/* Selettore colori — barra orizzontale scrollabile */}
-          <div className="colors-scroll"
-            style={{ position: isMobile ? 'relative' : 'absolute',
-              top: isMobile ? 0 : 12,
-              left: isMobile ? 'auto' : '50%',
-              transform: isMobile ? 'none' : 'translateX(-50%)',
-              width: isMobile ? '100%' : 'auto',
-              display:'flex', alignItems:'center', gap:5,
-              background:'rgba(255,255,255,0.96)',
-              borderRadius: isMobile ? 0 : 24,
-              padding: isMobile ? '6px 12px' : '5px 12px',
-              boxShadow: isMobile ? '0 1px 6px rgba(0,0,0,0.08)' : '0 2px 10px rgba(0,0,0,0.1)',
-              zIndex:5, flexShrink:0, marginBottom: isMobile ? 4 : 0 }}>
-            <span style={{ fontSize:11, color:'#888', marginRight:2, whiteSpace:'nowrap', flexShrink:0 }}>
-              {currentProduct?.name}:
-            </span>
-            {productColors.map(c => (
-              <div key={c} onClick={() => setProductColor(c)}
-                style={{ width:isMobile?24:20, height:isMobile?24:20, borderRadius:'50%',
-                  background:c, cursor:'pointer', flexShrink:0,
-                  border: productColor===c ? '2px solid #3fc7ba' : '1px solid #ccc',
-                  boxShadow: productColor===c ? '0 0 0 2px rgba(63,199,186,0.3)' : 'none',
-                  transition:'all 0.15s' }} />
-            ))}
-          </div>
+          {/* Selettore colori spostato nel pannello Prodotto (sidebar sinistra) */}
 
           {/* Alert zona rimosso — clipPath taglia automaticamente */}
 
@@ -2523,7 +2516,7 @@ function DesignerApp() {
               flexShrink: 0,
             }}>
 
-            {/* ── Sfondo bianco prodotto (stile Lumise) ── */}
+            {/* ── Sfondo bianco + colore prodotto sovrapposto ── */}
             <div style={{
               position:'absolute', top:0, left:0, width:400, height:svgH,
               background:'#ffffff',
@@ -2531,8 +2524,15 @@ function DesignerApp() {
               boxShadow:'0 2px 16px rgba(0,0,0,0.10)',
               zIndex:0, pointerEvents:'none'
             }} />
+            {/* Rettangolo colorato — il colore selezionato appare sotto il mockup */}
+            <div style={{
+              position:'absolute', top:0, left:0, width:400, height:svgH,
+              background: productColor || '#ffffff',
+              zIndex:1, pointerEvents:'none',
+              borderRadius:4,
+            }} />
 
-            {/* ── Mockup PNG da GitHub — sopra sfondo bianco ── */}
+            {/* ── Mockup PNG da GitHub — multiply per mostrare ombre sopra il colore ── */}
             {currentProduct?.mockups?.[currentSideName] ? (
               <img
                 src={currentProduct.mockups[currentSideName]}
@@ -2541,13 +2541,13 @@ function DesignerApp() {
                   position:'absolute', top:0, left:0,
                   width:400, height:svgH,
                   objectFit:'contain',
-                  zIndex:1, pointerEvents:'none',
+                  zIndex:2, pointerEvents:'none',
                   mixBlendMode:'multiply'
                 }}
               />
             ) : (
               // Fallback SVG generato se mockup non disponibile
-              <div style={{ position:'absolute', top:0, left:0, width:400, height:svgH, zIndex:1, pointerEvents:'none' }}
+              <div style={{ position:'absolute', top:0, left:0, width:400, height:svgH, zIndex:2, pointerEvents:'none' }}
                 dangerouslySetInnerHTML={{ __html: svgContent }} />
             )}
 
@@ -2769,6 +2769,8 @@ function DesignerApp() {
           products={PRODUCTS}
           currentProduct={product}
           onProductChange={id => switchSide(id, 0)}
+          productColor={productColor}
+          setProductColor={setProductColor}
         />
       )}
 
