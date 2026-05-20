@@ -1750,36 +1750,55 @@ function DesignerApp() {
   const [sideIndex, setSideIndex] = useState(0);
   const [productColor, setProductColor] = useState('#ffffff');
 
-  // ── Rect colorato nel canvas Fabric — tecnica identica a Lumise ──
-  // Quando productColor cambia, aggiorna il rect sotto tutti gli oggetti
+  // Calcolo anticipato per l'useEffect (non può usare const dichiarate dopo)
+  const _currentProduct = PRODUCTS.find((p) => p.id === product) || PRODUCTS[0];
+  const _currentSideName = _currentProduct?.sides?.[sideIndex] || 'Fronte';
+
+  // ── Mockup + colore dentro Fabric — tecnica Lumise corretta ──
+  // Carica il mockup PNG come fabric.Image con multiply dentro il canvas
+  // così il colore appare SOLO sulla forma della t-shirt
   useEffect(() => {
     const canvas = window.DesignerCanvas;
     if (!canvas) return;
-    // Cerca rect esistente
-    let rect = canvas.getObjects().find(o => o._isProductColor);
-    if (!rect) {
-      // Crea nuovo rect colorato non selezionabile
-      rect = new fabric.Rect({
-        width: canvas.width,
-        height: canvas.height,
-        left: canvas.width / 2,
-        top: canvas.height / 2,
-        originX: 'center',
-        originY: 'center',
-        fill: productColor,
-        selectable: false,
-        evented: false,
-        _isProductColor: true,
+
+    // Rimuovi vecchio mockup e rect colore
+    canvas.getObjects()
+      .filter(o => o._isProductColor || o._isMockup)
+      .forEach(o => canvas.remove(o));
+
+    const mockupUrl = _currentProduct?.mockups?.[_currentSideName];
+    if (!mockupUrl) { canvas.renderAll(); return; }
+
+    // 1. Rect colore sotto
+    const rect = new fabric.Rect({
+      width: canvas.width, height: canvas.height,
+      left: 0, top: 0,
+      fill: productColor,
+      selectable: false, evented: false,
+      _isProductColor: true,
+    });
+    canvas.add(rect);
+    canvas.sendToBack(rect);
+
+    // 2. Mockup PNG come fabric.Image con multiply sopra
+    fabric.Image.fromURL(mockupUrl, (img) => {
+      if (!img) return;
+      img.set({
+        left: 0, top: 0,
+        scaleX: canvas.width / img.width,
+        scaleY: canvas.height / img.height,
+        selectable: false, evented: false,
+        globalCompositeOperation: 'multiply',
+        _isMockup: true,
       });
-      // Inserisce come primo oggetto (sotto tutto)
-      canvas.add(rect);
+      canvas.add(img);
+      // Mockup sopra rect colore, sotto gli oggetti utente
+      canvas.sendToBack(img);
       canvas.sendToBack(rect);
-    } else {
-      rect.set('fill', productColor);
-      canvas.sendToBack(rect);
-    }
-    canvas.renderAll();
-  }, [productColor, canvasReady]);
+      canvas.renderAll();
+    }, { crossOrigin: 'anonymous' });
+
+  }, [productColor, product, sideIndex, canvasReady]);
 
   const [canUndo, setCanUndo] = useState(false);
   const [canRedo, setCanRedo] = useState(false);
@@ -2548,8 +2567,7 @@ function DesignerApp() {
               flexShrink: 0,
             }}>
 
-            {/* ── Sfondo bianco + mockup PNG sopra ── */}
-            {/* Il colore prodotto è gestito da fabric.Rect dentro il canvas Fabric (tecnica Lumise) */}
+            {/* Sfondo bianco contenitore canvas — colore e mockup gestiti dentro Fabric */}
             <div style={{
               position:'absolute', top:0, left:0, width:400, height:svgH,
               background:'#ffffff',
@@ -2557,22 +2575,6 @@ function DesignerApp() {
               borderRadius:4,
               zIndex:1, pointerEvents:'none',
             }} />
-            {currentProduct?.mockups?.[currentSideName] ? (
-              <img
-                src={currentProduct.mockups[currentSideName]}
-                alt={currentSideName}
-                style={{
-                  position:'absolute', top:0, left:0,
-                  width:400, height:svgH,
-                  objectFit:'contain',
-                  zIndex:3, pointerEvents:'none',
-                  mixBlendMode:'multiply',
-                }}
-              />
-            ) : (
-              <div style={{ position:'absolute', top:0, left:0, width:400, height:svgH, zIndex:3, pointerEvents:'none' }}
-                dangerouslySetInnerHTML={{ __html: svgContent }} />
-            )}
 
             {/* Zona stampa tratteggiata */}
             {/* Zona tratteggiata — id per toggle DOM diretto senza re-render */}
