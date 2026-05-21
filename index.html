@@ -1789,8 +1789,7 @@ function DesignerApp() {
     canvas.getObjects().filter(o => o._isProductColor).forEach(o => canvas.remove(o));
 
     // Colore come background del canvas — copre tutto il canvas
-    // Sfondo grigio Lumise — il multiply fuori t-shirt resta grigio, dentro si colora
-    canvas.setBackgroundColor(productColor || '#ebeced', canvas.renderAll.bind(canvas));
+    // backgroundColor rimosso — colore gestito via CSS filter sull'img HTML
 
     const _cp = PRODUCTS.find(p => p.id === product) || PRODUCTS[0];
     const _side = _cp?.sides?.[sideIndex] || 'Fronte';
@@ -2150,7 +2149,7 @@ function DesignerApp() {
         if (window._makeClipRect) obj.clipPath = window._makeClipRect(z);
       });
 
-      setTimeout(() => { DesignerHistory.save(canvas); setCanvasReady(true); }, 150);
+      setTimeout(() => { DesignerHistory.save(canvas); setCanvasReady(true); }, 300);
 
       // Cleanup listeners
       canvas._extraCleanup = () => {
@@ -2598,8 +2597,40 @@ function DesignerApp() {
               zIndex:1, pointerEvents:'none',
             }} />
 
-            {/* Fallback SVG solo se no mockup */}
-            {!currentProduct?.mockups?.[currentSideName] && (
+            {/* Mockup HTML con filtro CSS colore */}
+            {currentProduct?.mockups?.[currentSideName] ? (
+              <img
+                src={currentProduct.mockups[currentSideName]}
+                alt=""
+                style={{
+                  position:'absolute', top:0, left:0,
+                  width:400, height:svgH,
+                  objectFit:'contain',
+                  zIndex:2, pointerEvents:'none',
+                  // Filtro CSS per cambio colore — funziona su PNG con sfondo bianco
+                  filter: productColor === '#ffffff' || !productColor ? 'none' :
+                    (() => {
+                      // Converti hex in HSL per calcolare hue-rotate
+                      const hex = productColor.replace('#','');
+                      const r = parseInt(hex.substr(0,2),16)/255;
+                      const g = parseInt(hex.substr(2,2),16)/255;
+                      const b = parseInt(hex.substr(4,2),16)/255;
+                      const max = Math.max(r,g,b), min = Math.min(r,g,b);
+                      let h = 0;
+                      if (max !== min) {
+                        const d = max - min;
+                        if (max === r) h = ((g-b)/d + (g<b?6:0)) * 60;
+                        else if (max === g) h = ((b-r)/d + 2) * 60;
+                        else h = ((r-g)/d + 4) * 60;
+                      }
+                      const s = max === 0 ? 0 : (max-min)/max;
+                      const l = (max+min)/2;
+                      // Applica filtri per ottenere il colore target
+                      return `sepia(1) saturate(${Math.round(s*500+100)}%) hue-rotate(${Math.round(h-30)}deg) brightness(${Math.round(l*150+50)}%)`;
+                    })()
+                }}
+              />
+            ) : (
               <div style={{ position:'absolute', top:0, left:0, width:400, height:svgH, zIndex:2, pointerEvents:'none' }}
                 dangerouslySetInnerHTML={{ __html: svgContent }} />
             )}
