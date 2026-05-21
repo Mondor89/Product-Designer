@@ -1,0 +1,5 @@
+[[redirects]]
+  from = "/mockups/*"
+  to = "https://raw.githubusercontent.com/Mondor89/Product-Designer/main/mockups/:splat"
+  status = 200
+  force = true
