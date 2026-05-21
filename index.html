@@ -1773,6 +1773,19 @@ function MobileToolDrawer({ activeTab, onClose, onAddElement, products, currentP
 
 // ProductColorLayer rimosso — colore gestito con CSS overlay
 
+// Lookup table filtri CSS per colori prodotto
+const COLOR_FILTERS = {
+  '#ffffff': 'none',
+  '#000000': 'brightness(0) saturate(100%)',
+  '#e74c3c': 'invert(27%) sepia(83%) saturate(1200%) hue-rotate(330deg) brightness(95%) contrast(110%)',
+  '#3498db': 'invert(42%) sepia(93%) saturate(400%) hue-rotate(180deg) brightness(95%) contrast(110%)',
+  '#2ecc71': 'invert(68%) sepia(60%) saturate(400%) hue-rotate(100deg) brightness(95%) contrast(110%)',
+  '#f39c12': 'invert(65%) sepia(80%) saturate(600%) hue-rotate(5deg) brightness(100%) contrast(110%)',
+  '#9b59b6': 'invert(28%) sepia(60%) saturate(600%) hue-rotate(260deg) brightness(90%) contrast(110%)',
+  '#2c3e50': 'brightness(0) saturate(100%) invert(16%) sepia(20%) saturate(800%) hue-rotate(180deg)',
+  '#1db8aa': 'invert(60%) sepia(80%) saturate(400%) hue-rotate(150deg) brightness(95%) contrast(110%)',
+};
+
 function DesignerApp() {
   const [product, setProduct] = useState('tshirt');
   const [sideIndex, setSideIndex] = useState(0);
@@ -2149,7 +2162,11 @@ function DesignerApp() {
         if (window._makeClipRect) obj.clipPath = window._makeClipRect(z);
       });
 
-      setTimeout(() => { DesignerHistory.save(canvas); setCanvasReady(true); }, 300);
+      setTimeout(() => {
+        DesignerHistory.save(canvas);
+        setCanvasReady(c => !c); // toggle per forzare useEffect mockup
+        setTimeout(() => setCanvasReady(true), 50);
+      }, 300);
 
       // Cleanup listeners
       canvas._extraCleanup = () => {
@@ -2607,27 +2624,8 @@ function DesignerApp() {
                   width:400, height:svgH,
                   objectFit:'contain',
                   zIndex:2, pointerEvents:'none',
-                  // Filtro CSS per cambio colore — funziona su PNG con sfondo bianco
-                  filter: productColor === '#ffffff' || !productColor ? 'none' :
-                    (() => {
-                      // Converti hex in HSL per calcolare hue-rotate
-                      const hex = productColor.replace('#','');
-                      const r = parseInt(hex.substr(0,2),16)/255;
-                      const g = parseInt(hex.substr(2,2),16)/255;
-                      const b = parseInt(hex.substr(4,2),16)/255;
-                      const max = Math.max(r,g,b), min = Math.min(r,g,b);
-                      let h = 0;
-                      if (max !== min) {
-                        const d = max - min;
-                        if (max === r) h = ((g-b)/d + (g<b?6:0)) * 60;
-                        else if (max === g) h = ((b-r)/d + 2) * 60;
-                        else h = ((r-g)/d + 4) * 60;
-                      }
-                      const s = max === 0 ? 0 : (max-min)/max;
-                      const l = (max+min)/2;
-                      // Applica filtri per ottenere il colore target
-                      return `sepia(1) saturate(${Math.round(s*500+100)}%) hue-rotate(${Math.round(h-30)}deg) brightness(${Math.round(l*150+50)}%)`;
-                    })()
+                  // Filtro CSS pre-calcolato per colore esatto
+                  filter: COLOR_FILTERS[productColor] || COLOR_FILTERS['#ffffff'] || 'none'
                 }}
               />
             ) : (
