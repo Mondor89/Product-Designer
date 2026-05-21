@@ -845,7 +845,7 @@ function LeftPanel({ onAddElement, products, currentProduct, onProductChange, pr
               style={{ background:'none', border:'none', cursor:'pointer', color:'#bbb', fontSize:16 }}>✕</button>
           </div>
           <div style={{ flex:1, overflowY:'auto' }}>
-            {activeTab==='prodotto'  && <ProdottoPanel products={products} currentProduct={currentProduct} onProductChange={id => { onProductChange(id); setActiveTabRaw(null); }} selectedColor={productColor} onColorChange={setProductColor} />}
+            {activeTab==='prodotto'  && <ProdottoPanel products={products} currentProduct={currentProduct} onProductChange={id => { onProductChange(id); }} selectedColor={productColor} onColorChange={setProductColor} />}
             {activeTab==='ai'        && <AIPanel onAdd={onAddElement} />}
             {activeTab==='text'      && <TextPanel onAdd={onAddElement} />}
             {activeTab==='upload'    && <UploadPanel onAdd={onAddElement} />}
@@ -1756,7 +1756,7 @@ function MobileToolDrawer({ activeTab, onClose, onAddElement, products, currentP
         </div>
         {/* Contenuto panel */}
         <div style={{ flex:1, overflowY:'auto' }}>
-          {activeTab==='prodotto'  && <ProdottoPanel products={products} currentProduct={currentProduct} onProductChange={id => { onProductChange(id); onClose(); }} selectedColor={productColor} onColorChange={setProductColor} />}
+          {activeTab==='prodotto'  && <ProdottoPanel products={products} currentProduct={currentProduct} onProductChange={id => { onProductChange(id); }} selectedColor={productColor} onColorChange={setProductColor} />}
           {activeTab==='ai'        && <AIPanel onAdd={onAddElement} />}
           {activeTab==='text'      && <TextPanel onAdd={el => { onAddElement(el); onClose(); }} />}
           {activeTab==='upload'    && <UploadPanel onAdd={el => { onAddElement(el); onClose(); }} />}
@@ -1789,7 +1789,8 @@ function DesignerApp() {
     canvas.getObjects().filter(o => o._isProductColor).forEach(o => canvas.remove(o));
 
     // Colore come background del canvas — copre tutto il canvas
-    canvas.setBackgroundColor(productColor || '#ffffff', canvas.renderAll.bind(canvas));
+    // Sfondo grigio Lumise — il multiply fuori t-shirt resta grigio, dentro si colora
+    canvas.setBackgroundColor(productColor || '#ebeced', canvas.renderAll.bind(canvas));
 
     const _cp = PRODUCTS.find(p => p.id === product) || PRODUCTS[0];
     const _side = _cp?.sides?.[sideIndex] || 'Fronte';
@@ -2586,10 +2587,10 @@ function DesignerApp() {
               flexShrink: 0,
             }}>
 
-            {/* Sfondo bianco base — sotto il canvas */}
+            {/* Sfondo grigio Lumise — fuori dalla t-shirt diventa grigio con multiply */}
             <div style={{
               position:'absolute', top:0, left:0, width:400, height:svgH,
-              background:'#ffffff',
+              background:'#ebeced',
               boxShadow:'0 2px 16px rgba(0,0,0,0.10)',
               borderRadius:4,
               zIndex:1, pointerEvents:'none',
