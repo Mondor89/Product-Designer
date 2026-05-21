@@ -2461,16 +2461,20 @@ function DesignerApp() {
         <input ref={logoInputRef} type="file" accept="image/*" style={{ display:'none' }}
           onChange={e => handleLogoUpload(e.target.files[0])} />
 
-        {/* ── Undo/Redo ── */}
+        {/* ── Undo/Redo — sempre visibili bianchi, viola quando attivi ── */}
         {[['↩', () => DesignerHistory.undo(window.DesignerCanvas), !canUndo],
           ['↪', () => DesignerHistory.redo(window.DesignerCanvas), !canRedo]].map(([ico,fn,dis],i) => (
           <button key={i} onClick={fn} disabled={dis}
-            style={{ background:'rgba(255,255,255,0.1)',
-              border:'1px solid rgba(255,255,255,0.25)',
-              color: dis ? '#555' : '#fff', borderRadius:5,
-              padding: isMobile ? '3px 8px' : '4px 10px',
-              cursor: dis ? 'not-allowed' : 'pointer', fontSize:15,
-              flexShrink:0, opacity: dis ? 0.35 : 1 }}>
+            style={{
+              background: dis ? 'rgba(255,255,255,0.08)' : 'rgba(124,58,237,0.25)',
+              border: dis ? '1px solid rgba(255,255,255,0.3)' : '1px solid #7c3aed',
+              color: dis ? 'rgba(255,255,255,0.7)' : '#c4b5fd',
+              borderRadius:6,
+              padding: isMobile ? '4px 10px' : '5px 12px',
+              cursor: dis ? 'not-allowed' : 'pointer',
+              fontSize:16, flexShrink:0,
+              transition:'all 0.15s',
+            }}>
             {ico}
           </button>
         ))}
@@ -2582,7 +2586,7 @@ function DesignerApp() {
               flexShrink: 0,
             }}>
 
-            {/* Sfondo bianco */}
+            {/* Sfondo bianco base — sotto il canvas */}
             <div style={{
               position:'absolute', top:0, left:0, width:400, height:svgH,
               background:'#ffffff',
@@ -2591,19 +2595,8 @@ function DesignerApp() {
               zIndex:1, pointerEvents:'none',
             }} />
 
-            {/* Mockup PNG — visibile, gestione colore TODO */}
-            {currentProduct?.mockups?.[currentSideName] ? (
-              <img
-                src={currentProduct.mockups[currentSideName]}
-                alt={currentSideName}
-                style={{
-                  position:'absolute', top:0, left:0,
-                  width:400, height:svgH,
-                  objectFit:'contain',
-                  zIndex:2, pointerEvents:'none',
-                }}
-              />
-            ) : (
+            {/* Fallback SVG solo se no mockup */}
+            {!currentProduct?.mockups?.[currentSideName] && (
               <div style={{ position:'absolute', top:0, left:0, width:400, height:svgH, zIndex:2, pointerEvents:'none' }}
                 dangerouslySetInnerHTML={{ __html: svgContent }} />
             )}
@@ -2613,7 +2606,7 @@ function DesignerApp() {
             <div id="print-zone-outline" style={{ position:'absolute', top:zone.top, left:zone.left,
               width:zone.width, height:zone.height,
               border:'1.5px dashed rgba(63,199,186,0.55)',
-              borderRadius:4, zIndex:3, pointerEvents:'none',
+              borderRadius:4, zIndex:4, pointerEvents:'none',
               background:'rgba(63,199,186,0.03)',
               transition:'opacity 0.2s' }}>
               <div style={{ position:'absolute', bottom:-16, left:0, fontSize:9, whiteSpace:'nowrap',
@@ -2626,7 +2619,7 @@ function DesignerApp() {
 
             {/* Fabric canvas */}
             <canvas id="main-canvas" style={{
-              position:'absolute', top:0, left:0, zIndex:2, width:400, height:svgH,
+              position:'absolute', top:0, left:0, zIndex:3, width:400, height:svgH, background:'transparent',
             }} />
 
             {/* Preview mask — gestita fuori dallo stage per evitare problemi di scaling */}
