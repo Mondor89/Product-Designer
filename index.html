@@ -1761,11 +1761,13 @@ function DesignerApp() {
     // Rimuovi overlay precedente
     canvas.setOverlayImage(null, () => {});
 
-    // Rect colore sotto tutto
+    // Rect colore — copre TUTTO il canvas (larghezza e altezza complete)
     let rect = canvas.getObjects().find(o => o._isProductColor);
+    const cw = canvas.getWidth();
+    const ch = canvas.getHeight();
     if (!rect) {
       rect = new fabric.Rect({
-        width: canvas.width, height: canvas.height,
+        width: cw, height: ch,
         left: 0, top: 0,
         fill: productColor || '#ffffff',
         selectable: false, evented: false,
@@ -1773,7 +1775,7 @@ function DesignerApp() {
       });
       canvas.add(rect);
     } else {
-      rect.set('fill', productColor || '#ffffff');
+      rect.set({ fill: productColor || '#ffffff', width: cw, height: ch });
     }
     canvas.sendToBack(rect);
 
@@ -2642,7 +2644,7 @@ function DesignerApp() {
 
           {/* Side tabs — solo desktop/tablet (floating) */}
           {!isMobile && (
-            <div style={{ position:'absolute', bottom:24, left:'50%', transform:'translateX(-50%)',
+            <div style={{ position:'absolute', bottom:12, left:'50%', transform:'translateX(-50%)',
               display:'flex', gap:4, background:'rgba(255,255,255,0.96)', borderRadius:24,
               padding:'5px 8px', boxShadow:'0 2px 12px rgba(0,0,0,0.1)', zIndex:5 }}>
               {currentProduct?.sides.map((side, i) => {
