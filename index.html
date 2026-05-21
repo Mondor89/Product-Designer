@@ -1791,41 +1791,52 @@ function DesignerApp() {
   const [sideIndex, setSideIndex] = useState(0);
   const [productColor, setProductColor] = useState('#ffffff');
 
-  // ── Colore prodotto — canvas.backgroundColor + overlay mockup multiply ──
+  // ── OPZIONE A: rect colore + overlay mockup multiply via URL Netlify ──
+  // Tecnica identica a Lumise — fabric.Image non usa canvas 2D quindi no CORS
+  // URL Netlify (/mockups/...) è same-origin → nessun problema CORS
   useEffect(() => {
     const canvas = window.DesignerCanvas;
     if (!canvas) return;
     const cw = canvas.getWidth();
     const ch = canvas.getHeight();
 
-    // Rimuovi oggetti colore precedenti
+    // 1. Rimuovi rect colore precedente e overlay
     canvas.getObjects().filter(o => o._isProductColor).forEach(o => canvas.remove(o));
+    canvas.setOverlayImage(null, () => {});
 
-    // Colore come background del canvas — copre tutto il canvas
-    // backgroundColor rimosso — colore gestito via CSS filter sull'img HTML
+    // 2. Rect colorato — copre tutto il canvas, sta sotto tutto
+    const rect = new fabric.Rect({
+      width: cw, height: ch,
+      left: 0, top: 0,
+      fill: productColor || '#ffffff',
+      selectable: false, evented: false,
+      _isProductColor: true,
+    });
+    canvas.add(rect);
+    canvas.sendToBack(rect);
 
+    // 3. Mockup come overlay con multiply — URL Netlify, no CORS
+    // fabric.Image usa img HTML element internamente, non canvas 2D → no SecurityError
     const _cp = PRODUCTS.find(p => p.id === product) || PRODUCTS[0];
     const _side = _cp?.sides?.[sideIndex] || 'Fronte';
-    const mockupUrl = _cp?.mockups?.[_side];
+    // Usa URL Netlify relativo — funziona perché publish dir = "."
+    const mockupUrl = `/mockups/${product}/${_side === 'Fronte' ? 'fronte' : 'retro'}.png`;
     const loadToken = Date.now();
     canvas._mockupToken = loadToken;
 
-    if (mockupUrl) {
-      // Overlay mockup con multiply — il bianco del PNG + colore background = colore t-shirt
-      fabric.Image.fromURL(mockupUrl, (img) => {
-        if (canvas._mockupToken !== loadToken) return;
-        if (!img) { canvas.renderAll(); return; }
-        img.set({
-          left: 0, top: 0,
-          scaleX: cw / img.width,
-          scaleY: ch / img.height,
-          globalCompositeOperation: 'multiply',
-        });
-        canvas.setOverlayImage(img, canvas.renderAll.bind(canvas));
+    fabric.Image.fromURL(mockupUrl, (img) => {
+      if (canvas._mockupToken !== loadToken) return;
+      if (!img) { canvas.renderAll(); return; }
+      img.set({
+        left: 0, top: 0,
+        scaleX: cw / img.width,
+        scaleY: ch / img.height,
+        globalCompositeOperation: 'multiply',
+        selectable: false, evented: false,
       });
-    } else {
-      canvas.setOverlayImage(null, canvas.renderAll.bind(canvas));
-    }
+      canvas.setOverlayImage(img, canvas.renderAll.bind(canvas));
+    });
+
   }, [productColor, product, sideIndex, canvasReady]);
 
   const [canUndo, setCanUndo] = useState(false);
@@ -2625,7 +2636,7 @@ function DesignerApp() {
                   objectFit:'contain',
                   zIndex:2, pointerEvents:'none',
                   // Filtro CSS pre-calcolato per colore esatto
-                  filter: COLOR_FILTERS[productColor] || COLOR_FILTERS['#ffffff'] || 'none'
+                  filter: 'none'
                 }}
               />
             ) : (
