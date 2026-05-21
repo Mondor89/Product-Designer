@@ -1778,47 +1778,28 @@ function DesignerApp() {
   const [sideIndex, setSideIndex] = useState(0);
   const [productColor, setProductColor] = useState('#ffffff');
 
-  // ── Colore prodotto via sagoma — fabric.Path dal contorno reale del capo ──
+  // ── Colore prodotto — canvas.backgroundColor + overlay mockup multiply ──
   useEffect(() => {
     const canvas = window.DesignerCanvas;
     if (!canvas) return;
     const cw = canvas.getWidth();
     const ch = canvas.getHeight();
 
-    // Rimuovi sagoma colore e overlay precedenti
+    // Rimuovi oggetti colore precedenti
     canvas.getObjects().filter(o => o._isProductColor).forEach(o => canvas.remove(o));
-    canvas.setOverlayImage(null, () => {});
+
+    // Colore come background del canvas — copre tutto il canvas
+    canvas.setBackgroundColor(productColor || '#ffffff', canvas.renderAll.bind(canvas));
 
     const _cp = PRODUCTS.find(p => p.id === product) || PRODUCTS[0];
     const _side = _cp?.sides?.[sideIndex] || 'Fronte';
-    const maskPts = PRODUCT_MASKS?.[product]?.[_side];
-
-    if (maskPts && maskPts.length > 0) {
-      // Path SVG dalla maschera normalizzata (0-1) scalata al canvas
-      // Coordinate già in px canvas (400x440) — uso direttamente
-      const d = 'M ' + maskPts.map(p =>
-        `${p[0]} ${p[1]}`
-      ).join(' L ') + ' Z';
-
-      const shape = new fabric.Path(d, {
-        left: 0, top: 0,
-        fill: productColor || '#ffffff',
-        selectable: false, evented: false,
-        _isProductColor: true,
-      });
-      canvas.add(shape);
-      canvas.sendToBack(shape);
-    }
-
-    // Mockup originale come overlay con multiply — ombre e texture sopra il colore
     const mockupUrl = _cp?.mockups?.[_side];
-    // Token anti-race: evita che caricamenti precedenti sovrascrivano quello corrente
     const loadToken = Date.now();
     canvas._mockupToken = loadToken;
 
     if (mockupUrl) {
+      // Overlay mockup con multiply — il bianco del PNG + colore background = colore t-shirt
       fabric.Image.fromURL(mockupUrl, (img) => {
-        // Se nel frattempo è partito un altro caricamento, ignora questo
         if (canvas._mockupToken !== loadToken) return;
         if (!img) { canvas.renderAll(); return; }
         img.set({
