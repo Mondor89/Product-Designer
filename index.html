@@ -1813,6 +1813,7 @@ function DesignerApp() {
       fill: productColor || '#ffffff',
       selectable: false, evented: false,
       _isProductColor: true,
+      _noClip: true,
     });
     canvas.add(rect);
     canvas.sendToBack(rect);
@@ -1842,6 +1843,7 @@ function DesignerApp() {
         globalCompositeOperation: 'multiply',
         selectable: false, evented: false,
         _isMockupOverlay: true,
+        _noClip: true,
       });
 
       // Aggiungi come oggetto normale e portalo in primo piano
