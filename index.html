@@ -1792,17 +1792,18 @@ function DesignerApp() {
   const [sideIndex, setSideIndex] = useState(0);
   const [productColor, setProductColor] = useState('#ffffff');
 
-  // ── OPZIONE A: rect colore + overlay mockup multiply via URL Netlify ──
-  // Tecnica identica a Lumise — fabric.Image non usa canvas 2D quindi no CORS
-  // URL Netlify (/mockups/...) è same-origin → nessun problema CORS
+  // ── T10: rect colore + mockup multiply come oggetto Fabric normale ──
+  // Differenza da T9: usiamo canvas.add + bringToFront invece di setOverlayImage
+  // setOverlayImage in Fabric 5.3.1 scala male → copriva solo zona centrale
+  // bringToFront garantisce che il mockup stia sopra rect e oggetti utente
   useEffect(() => {
     const canvas = window.DesignerCanvas;
     if (!canvas) return;
     const cw = canvas.getWidth();
     const ch = canvas.getHeight();
 
-    // 1. Rimuovi rect colore precedente e overlay
-    canvas.getObjects().filter(o => o._isProductColor).forEach(o => canvas.remove(o));
+    // 1. Rimuovi rect colore e mockup overlay precedenti
+    canvas.getObjects().filter(o => o._isProductColor || o._isMockupOverlay).forEach(o => canvas.remove(o));
     canvas.setOverlayImage(null, () => {});
 
     // 2. Rect colorato — copre tutto il canvas, sta sotto tutto
@@ -1816,11 +1817,10 @@ function DesignerApp() {
     canvas.add(rect);
     canvas.sendToBack(rect);
 
-    // 3. Mockup come overlay con multiply — URL Netlify, no CORS
-    // fabric.Image usa img HTML element internamente, non canvas 2D → no SecurityError
+    // 3. Mockup come oggetto Fabric normale con multiply — URL Netlify, no CORS
+    // scaleToWidth è più affidabile di scaleX manuale in Fabric 5.3.1
     const _cp = PRODUCTS.find(p => p.id === product) || PRODUCTS[0];
     const _side = _cp?.sides?.[sideIndex] || 'Fronte';
-    // Usa URL Netlify relativo — funziona perché publish dir = "."
     const mockupUrl = `/mockups/${product}/${_side === 'Fronte' ? 'fronte' : 'retro'}.png`;
     const loadToken = Date.now();
     canvas._mockupToken = loadToken;
@@ -1828,18 +1828,26 @@ function DesignerApp() {
     fabric.Image.fromURL(mockupUrl, (img) => {
       if (canvas._mockupToken !== loadToken) return;
       if (!img) { canvas.renderAll(); return; }
-      // Usa getWidth/getHeight per dimensioni reali elemento img
-      const imgW = img.getScaledWidth() || img.width || 400;
-      const imgH = img.getScaledHeight() || img.height || 440;
+
+      // scaleToWidth scala proporzionalmente all'intera larghezza del canvas
+      img.scaleToWidth(cw);
+      // Se l'altezza risultante non copre il canvas, forza anche quella
+      if (img.getScaledHeight() < ch) {
+        img.scaleToHeight(ch);
+      }
+
       img.set({
         left: 0, top: 0,
         originX: 'left', originY: 'top',
-        scaleX: cw / imgW,
-        scaleY: ch / imgH,
         globalCompositeOperation: 'multiply',
         selectable: false, evented: false,
+        _isMockupOverlay: true,
       });
-      canvas.setOverlayImage(img, canvas.renderAll.bind(canvas));
+
+      // Aggiungi come oggetto normale e portalo in primo piano
+      canvas.add(img);
+      canvas.bringToFront(img);
+      canvas.renderAll();
     });
 
   }, [productColor, product, sideIndex, canvasReady]);
@@ -2642,24 +2650,8 @@ function DesignerApp() {
               zIndex:1, pointerEvents:'none',
             }} />
 
-            {/* Mockup HTML con filtro CSS colore */}
-            {currentProduct?.mockups?.[currentSideName] ? (
-              <img
-                src={currentProduct.mockups[currentSideName]}
-                alt=""
-                style={{
-                  position:'absolute', top:0, left:0,
-                  width:400, height:svgH,
-                  objectFit:'contain',
-                  zIndex:2, pointerEvents:'none',
-                  // Filtro CSS pre-calcolato per colore esatto
-                  filter: 'none'
-                }}
-              />
-            ) : (
-              <div style={{ position:'absolute', top:0, left:0, width:400, height:svgH, zIndex:2, pointerEvents:'none' }}
-                dangerouslySetInnerHTML={{ __html: svgContent }} />
-            )}
+            {/* Mockup gestito da Fabric canvas (T10) — img HTML rimosso */}
+            {/* rect colore (sotto) + oggetti utente + mockup multiply (sopra) */}
 
             {/* Zona stampa tratteggiata */}
             {/* Zona tratteggiata — id per toggle DOM diretto senza re-render */}
