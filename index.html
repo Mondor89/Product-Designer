@@ -110,7 +110,7 @@ window.AdminStore = {
         productWidthCm: 50,
       },
       {
-        id:'hoodie', name:'Hoodie', icon:'🥷',
+        id:'hoodie', name:'Hoodie', icon:'🧤',
         sides:['Fronte','Retro','Sinistra','Destra'],
         mockups:{
           Fronte:   '/mockups/hoodie/fronte.png',
@@ -123,7 +123,7 @@ window.AdminStore = {
         productWidthCm: 50,
       },
       {
-        id:'manica_lunga', name:'Manica Lunga', icon:'🦺',
+        id:'manica_lunga', name:'Manica Lunga', icon:'👕',
         sides:['Fronte','Retro','Sinistra','Destra'],
         mockups:{
           Fronte:   '/mockups/manica_lunga/fronte.png',
@@ -1792,10 +1792,10 @@ function DesignerApp() {
   const [sideIndex, setSideIndex] = useState(0);
   const [productColor, setProductColor] = useState('#ffffff');
 
-  // ── T10: rect colore + mockup multiply come oggetto Fabric normale ──
-  // Differenza da T9: usiamo canvas.add + bringToFront invece di setOverlayImage
-  // setOverlayImage in Fabric 5.3.1 scala male → copriva solo zona centrale
-  // bringToFront garantisce che il mockup stia sopra rect e oggetti utente
+  // ── OPZIONE C: rect colore + mockup PNG trasparente sopra ──
+  // PNG sfondo trasparente (da remove.bg) → rect colorato visibile solo sotto la sagoma
+  // Niente multiply — il PNG trasparente copre naturalmente solo la t-shirt
+  // Stack: rect colore (fondo) → oggetti utente → mockup PNG trasparente (cima)
   useEffect(() => {
     const canvas = window.DesignerCanvas;
     if (!canvas) return;
@@ -1807,6 +1807,7 @@ function DesignerApp() {
     canvas.setOverlayImage(null, () => {});
 
     // 2. Rect colorato — copre tutto il canvas, sta sotto tutto
+    // Con PNG trasparente il colore si vede solo dentro la sagoma del prodotto
     const rect = new fabric.Rect({
       width: cw, height: ch,
       left: 0, top: 0,
@@ -1818,8 +1819,8 @@ function DesignerApp() {
     canvas.add(rect);
     canvas.sendToBack(rect);
 
-    // 3. Mockup come oggetto Fabric normale con multiply — URL Netlify, no CORS
-    // scaleToWidth è più affidabile di scaleX manuale in Fabric 5.3.1
+    // 3. Mockup PNG trasparente — sta sopra tutto inclusi gli oggetti utente
+    // Nessun globalCompositeOperation — il PNG trasparente fa tutto da solo
     const _cp = PRODUCTS.find(p => p.id === product) || PRODUCTS[0];
     const _side = _cp?.sides?.[sideIndex] || 'Fronte';
     const mockupUrl = `/mockups/${product}/${_side === 'Fronte' ? 'fronte' : 'retro'}.png`;
@@ -1830,23 +1831,18 @@ function DesignerApp() {
       if (canvas._mockupToken !== loadToken) return;
       if (!img) { canvas.renderAll(); return; }
 
-      // scaleToWidth scala proporzionalmente all'intera larghezza del canvas
       img.scaleToWidth(cw);
-      // Se l'altezza risultante non copre il canvas, forza anche quella
-      if (img.getScaledHeight() < ch) {
-        img.scaleToHeight(ch);
-      }
+      if (img.getScaledHeight() < ch) img.scaleToHeight(ch);
 
       img.set({
         left: 0, top: 0,
         originX: 'left', originY: 'top',
-        globalCompositeOperation: 'multiply',
+        // Niente multiply — PNG trasparente non ne ha bisogno
         selectable: false, evented: false,
         _isMockupOverlay: true,
         _noClip: true,
       });
 
-      // Aggiungi come oggetto normale e portalo in primo piano
       canvas.add(img);
       canvas.bringToFront(img);
       canvas.renderAll();
@@ -1937,7 +1933,7 @@ function DesignerApp() {
     const init = () => {
       const el = document.getElementById('main-canvas');
       if (!el || window.DesignerCanvas) return;
-      const svgH = ['longsleeve'].includes(product) ? 500 : 440;
+      const svgH = ['longsleeve','hoodie'].includes(product) ? 500 : 440;
       const canvas = new fabric.Canvas('main-canvas', {
         width: 400, height: svgH, preserveObjectStacking: true,
         backgroundColor: 'rgba(0,0,0,0)'
@@ -2500,7 +2496,7 @@ function DesignerApp() {
   const svgContent = (PRODUCT_SVGS[product] || PRODUCT_SVGS.tshirt)(productColor);
 
   // ── Variabili canvas ──────────────────────────────────────────
-  const svgH = product === 'longsleeve' ? 500 : 440; // longsleeve è più alta
+  const svgH = ['longsleeve','hoodie'].includes(product) ? 500 : 440; // hoodie e longsleeve più alte
 
   return (
     <div style={{ display:'flex', flexDirection:'column', height:'100vh', overflow:'hidden' }}>
@@ -2643,7 +2639,7 @@ function DesignerApp() {
               borderRadius:4,
             }}>
 
-            {/* Sfondo grigio Lumise — fuori dalla t-shirt diventa grigio con multiply */}
+            {/* Sfondo grigio Lumise — visibile fuori dalla sagoma del PNG trasparente */}
             <div style={{
               position:'absolute', top:0, left:0, width:400, height:svgH,
               background:'#ebeced',
@@ -2653,7 +2649,7 @@ function DesignerApp() {
             }} />
 
             {/* Mockup gestito da Fabric canvas (T10) — img HTML rimosso */}
-            {/* rect colore (sotto) + oggetti utente + mockup multiply (sopra) */}
+            {/* rect colore (sotto) → oggetti utente → mockup PNG trasparente (sopra) */}
 
             {/* Zona stampa tratteggiata */}
             {/* Zona tratteggiata — id per toggle DOM diretto senza re-render */}
