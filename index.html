@@ -1830,13 +1830,10 @@ function DesignerApp() {
       if (canvas._mockupToken !== loadToken) return;
 
       // Canvas 2D offscreen per manipolazione pixel
-      // Usiamo dimensioni naturali del PNG (no upscale) — qualità massima
       const offscreen = document.createElement('canvas');
       offscreen.width = img.width;
       offscreen.height = img.height;
       const ctx = offscreen.getContext('2d');
-      // Disabilita smoothing — pixel netti
-      ctx.imageSmoothingEnabled = false;
       ctx.drawImage(img, 0, 0);
 
       const imageData = ctx.getImageData(0, 0, offscreen.width, offscreen.height);
@@ -1855,7 +1852,7 @@ function DesignerApp() {
       ctx.putImageData(imageData, 0, 0);
 
       // Carica il canvas 2D colorato come fabric.Image — qualità PNG massima
-      fabric.Image.fromURL(offscreen.toDataURL('image/png', 1.0), (fImg) => {
+      fabric.Image.fromURL(offscreen.toDataURL(), (fImg) => {
         if (canvas._mockupToken !== loadToken) return;
         // Pulizia DENTRO il callback — rimuove eventuali overlay arrivati in ritardo
         canvas.getObjects().filter(o => o._isMockupOverlay).forEach(o => canvas.remove(o));
@@ -1870,8 +1867,6 @@ function DesignerApp() {
           hoverCursor: 'default',
           _isMockupOverlay: true,
           _noClip: true,
-          // Massima qualità rendering in Fabric
-          imageSmoothing: true,
         });
         canvas.add(fImg);
         canvas.bringToFront(fImg);
@@ -1976,11 +1971,9 @@ function DesignerApp() {
       const el = document.getElementById('main-canvas');
       if (!el || window.DesignerCanvas) return;
       const svgH = product === 'hoodie' ? 533 : product === 'longsleeve' ? 500 : 475;
-      const dpr = window.devicePixelRatio || 1;
       const canvas = new fabric.Canvas('main-canvas', {
         width: 400, height: svgH, preserveObjectStacking: true,
         backgroundColor: 'rgba(0,0,0,0)',
-        enableRetinaScaling: true,
       });
       window.DesignerCanvas = canvas;
 
