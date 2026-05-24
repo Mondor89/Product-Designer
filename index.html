@@ -1711,7 +1711,7 @@ function useCanvasBaseScale(bp) {
       const avW = window.innerWidth  - leftW - 24;
       const avH = window.innerHeight - topH - botH - 24;
       const s = Math.min(avW / 400, avH / 440);
-      setBaseScale(Math.max(0.3, Math.min(2.0, s)));
+      setBaseScale(Math.max(0.3, Math.min(1.0, s)));
     };
     calc();
     window.addEventListener('resize', calc);
