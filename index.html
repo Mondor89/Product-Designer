@@ -27,8 +27,7 @@
   .product-side-btn { transition: all 0.2s; }
   .product-side-btn:hover { background: #e8faf9 !important; }
   .panel-scroll::-webkit-scrollbar { width: 4px; }
-  .canvas-stage { touch-action: none; overflow: hidden; image-rendering: -webkit-optimize-contrast; image-rendering: crisp-edges; }
-  .canvas-stage canvas { image-rendering: -webkit-optimize-contrast; image-rendering: crisp-edges; }
+  .canvas-stage { touch-action: none; overflow: hidden; }
   .canvas-stage .canvas-container { position: absolute !important; top: 0 !important; left: 0 !important; }
   .colors-scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; }
   .colors-scroll::-webkit-scrollbar { height: 3px; }
@@ -92,10 +91,11 @@ window.AdminStore = {
           Destra:   null,
         },
         colors:['#ffffff','#000000','#e74c3c','#3498db','#2ecc71','#f39c12','#9b59b6'],
-        // zona stampa in CM — larghezza reale prodotto = 50cm = 400px canvas
+        // zona stampa in CM — relativa al bordo sinistro/alto della t-shirt reale
         printZoneCm:{ x:11, y:9, w:28, h:34 },
-        // larghezza reale prodotto in CM (per conversione CM→px)
         productWidthCm: 50,
+        // margini PNG misurati sul file originale 530×630px — usati per allineare la zona stampa
+        pngMargin:{ left:47, top:26, shirtW:438, pngW:530 },
       },
       {
         id:'felpa', name:'Felpa', icon:'🧥',
@@ -109,6 +109,8 @@ window.AdminStore = {
         colors:['#ffffff','#000000','#e74c3c','#2c3e50','#9b59b6'],
         printZoneCm:{ x:11, y:10, w:28, h:34 },
         productWidthCm: 50,
+        // PNG felpa senza margini trasparenti — aggiornare quando mockup definitivo pronto
+        pngMargin:{ left:0, top:0, shirtW:530, pngW:530 },
       },
       {
         id:'hoodie', name:'Hoodie', icon:'🧤',
@@ -122,6 +124,8 @@ window.AdminStore = {
         colors:['#ffffff','#000000','#e74c3c','#2c3e50','#3498db','#9b59b6'],
         printZoneCm:{ x:11, y:12, w:28, h:32 },
         productWidthCm: 50,
+        // PNG hoodie senza margini trasparenti — aggiornare quando mockup definitivo pronto
+        pngMargin:{ left:0, top:0, shirtW:670, pngW:670 },
       },
       {
         id:'manica_lunga', name:'Manica Lunga', icon:'👕',
@@ -135,6 +139,8 @@ window.AdminStore = {
         colors:['#ffffff','#000000','#e74c3c','#3498db','#2ecc71','#2c3e50'],
         printZoneCm:{ x:11, y:9, w:28, h:34 },
         productWidthCm: 50,
+        // PNG manica_lunga senza margini trasparenti — aggiornare quando mockup definitivo pronto
+        pngMargin:{ left:0, top:0, shirtW:530, pngW:530 },
       },
       {
         id:'vneck', name:'V-Neck', icon:'👔',
@@ -148,6 +154,8 @@ window.AdminStore = {
         colors:['#ffffff','#000000','#e74c3c','#3498db','#2ecc71','#f39c12'],
         printZoneCm:{ x:11, y:9, w:28, h:34 },
         productWidthCm: 50,
+        // margini PNG vneck misurati — stesso formato tshirt (stessa forma)
+        pngMargin:{ left:47, top:29, shirtW:438, pngW:530 },
       },
     ],
     cliparts: [
@@ -1914,13 +1922,29 @@ function DesignerApp() {
   const currentProduct = PRODUCTS.find((p) => p.id === product) || PRODUCTS[0];
   // Nome lato corrente (es. 'Fronte', 'Retro') — usato per caricare mockup
   const currentSideName = currentProduct?.sides?.[sideIndex] || 'Fronte';
-  // Zona stampa: se prodotto ha printZoneCm, calcola px (1cm = 400/productWidthCm px)
-  const cmToPx = currentProduct?.productWidthCm ? (400 / currentProduct.productWidthCm) : 8;
-  const pz = currentProduct?.printZoneCm;
-  const zone = pz
-    ? { left: Math.round(pz.x * cmToPx), top: Math.round(pz.y * cmToPx),
-        width: Math.round(pz.w * cmToPx), height: Math.round(pz.h * cmToPx) }
-    : (currentProduct?.printZone || { left:135, top:115, width:130, height:160 });
+  // Zona stampa: calcola px tenendo conto dei margini trasparenti del PNG mockup
+  // Il PNG non è largo quanto il canvas — la t-shirt inizia a pngMargin.left pixel dal bordo
+  // Formula: margine_canvas + (posizione_cm / larghezza_cm * larghezza_shirt_canvas)
+  const pz  = currentProduct?.printZoneCm;
+  const pm  = currentProduct?.pngMargin;
+  const zone = (() => {
+    if (!pz) return currentProduct?.printZone || { left:135, top:115, width:130, height:160 };
+    const CANVAS_W = 400;
+    // Scala del PNG sul canvas (scaleToWidth)
+    const imgScale  = pm ? (CANVAS_W / pm.pngW) : 1;
+    // Posizione e dimensione della shirt nel canvas dopo la scala
+    const shirtLeft = pm ? pm.left  * imgScale : 0;
+    const shirtTop  = pm ? pm.top   * imgScale : 0;
+    const shirtW    = pm ? pm.shirtW * imgScale : CANVAS_W;
+    // 1cm in pixel canvas = larghezza_shirt_canvas / productWidthCm
+    const cmPx = shirtW / (currentProduct?.productWidthCm || 50);
+    return {
+      left:   Math.round(shirtLeft + pz.x * cmPx),
+      top:    Math.round(shirtTop  + pz.y * cmPx),
+      width:  Math.round(pz.w * cmPx),
+      height: Math.round(pz.h * cmPx),
+    };
+  })();
   const scale = zoom / 100;
   const productColors = currentProduct?.colors || ['#ffffff','#000000'];
 
