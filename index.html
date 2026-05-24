@@ -1788,7 +1788,8 @@ const COLOR_FILTERS = {
 };
 
 function DesignerApp() {
-  const [product, setProduct] = useState('tshirt');
+  const [product, setProduct] = useState(null); // nessun prodotto selezionato di default
+  const [mockupKey, setMockupKey] = React.useState(0); // forza reload mockup
   const [sideIndex, setSideIndex] = useState(0);
   const [productColor, setProductColor] = useState('#ffffff');
 
@@ -1798,6 +1799,8 @@ function DesignerApp() {
   // Funziona perché: pixel trasparenti (sfondo) → saltati → sfondo grigio visibile
   //                  pixel opachi (t-shirt bianca) → colorati col colore scelto
   useEffect(() => {
+    // Piccolo delay per assicurarsi che il canvas sia pronto al primo mount
+    const timer = setTimeout(() => {
     const canvas = window.DesignerCanvas;
     if (!canvas) return;
     const cw = canvas.getWidth();
@@ -1851,6 +1854,8 @@ function DesignerApp() {
       // Carica il canvas 2D colorato come fabric.Image
       fabric.Image.fromURL(offscreen.toDataURL(), (fImg) => {
         if (canvas._mockupToken !== loadToken) return;
+        // Pulizia DENTRO il callback — rimuove eventuali overlay arrivati in ritardo
+        canvas.getObjects().filter(o => o._isMockupOverlay).forEach(o => canvas.remove(o));
         fImg.scaleToWidth(cw);
         if (fImg.getScaledHeight() < ch) fImg.scaleToHeight(ch);
         fImg.set({
@@ -1866,8 +1871,9 @@ function DesignerApp() {
       });
     };
     img.src = mockupUrl;
-
-  }, [productColor, product, sideIndex, canvasReady]);
+    }, 50); // delay 50ms
+    return () => clearTimeout(timer);
+  }, [productColor, product, sideIndex, canvasReady, mockupKey]);
 
   const [canUndo, setCanUndo] = useState(false);
   const [canRedo, setCanRedo] = useState(false);
@@ -2270,6 +2276,7 @@ function DesignerApp() {
     }
     setProduct(newProduct);
     setSideIndex(newSide);
+    setMockupKey(k => k + 1); // forza reload mockup anche se stesso prodotto
   };
 
   useEffect(() => {
@@ -2658,11 +2665,20 @@ function DesignerApp() {
 
           {/* Alert zona rimosso — clipPath taglia automaticamente */}
 
+          {/* Messaggio iniziale — nessun prodotto selezionato */}
+          {!product && (
+            <div style={{ textAlign:'center', color:'#aaa', userSelect:'none' }}>
+              <div style={{ fontSize:52, marginBottom:12 }}>👕</div>
+              <div style={{ fontSize:15, fontWeight:500, color:'#888' }}>Seleziona un prodotto per iniziare</div>
+            </div>
+          )}
+
           {/* Stage canvas — scalato automaticamente */}
           <div className="canvas-stage"
             style={{ position:'relative',
               width:400, height:svgH,
               overflow:'hidden',
+              display: product ? 'block' : 'none',
               transform:`scale(${canvasScale})`,
               transformOrigin: `${((zone.left + zone.width/2) / 400 * 100).toFixed(1)}% ${((zone.top + zone.height/2) / (svgH) * 100).toFixed(1)}%`,
               transition:'transform 0.2s',
