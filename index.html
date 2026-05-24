@@ -2175,16 +2175,7 @@ function DesignerApp() {
 
 
 
-      canvas.on('selection:created', (e) => {
-        // Blocca selezione di mockup overlay e rect colore
-        const obj = e.selected?.[0];
-        if (obj && (obj._isMockupOverlay || obj._isProductColor)) {
-          canvas.discardActiveObject();
-          canvas.renderAll();
-          return;
-        }
-        DesignerBus.emit('selectionCreated', obj);
-      });
+      canvas.on('selection:created', (e) => DesignerBus.emit('selectionCreated', e.selected?.[0]));
       canvas.on('selection:updated', (e) => DesignerBus.emit('selectionUpdated', e.selected?.[0]));
       canvas.on('selection:cleared', () => DesignerBus.emit('selectionCleared'));
       canvas.on('object:modified', () => { DesignerHistory.save(canvas); checkBounds(); });
@@ -2244,19 +2235,6 @@ function DesignerApp() {
         if (window._makeClipRect) obj.clipPath = window._makeClipRect(z);
       });
 
-      // Aggiorna clipPath durante movimento e scaling — evita lag visivo
-      const refreshClip = (e) => {
-        const obj = e.target;
-        if (!obj || obj._noClip) return;
-        const z = window._designerZone || zone;
-        if (window._makeClipRect) {
-          obj.clipPath = window._makeClipRect(z);
-          canvas.requestRenderAll();
-        }
-      };
-      canvas.on('object:moving', refreshClip);
-      canvas.on('object:scaling', refreshClip);
-      canvas.on('object:rotating', refreshClip);
 
       setTimeout(() => {
         DesignerHistory.save(canvas);
