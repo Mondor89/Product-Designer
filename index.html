@@ -1913,13 +1913,36 @@ function DesignerApp() {
   const currentProduct = PRODUCTS.find((p) => p.id === product) || PRODUCTS[0];
   // Nome lato corrente (es. 'Fronte', 'Retro') — usato per caricare mockup
   const currentSideName = currentProduct?.sides?.[sideIndex] || 'Fronte';
-  // Zona stampa: se prodotto ha printZoneCm, calcola px (1cm = 400/productWidthCm px)
-  const cmToPx = currentProduct?.productWidthCm ? (400 / currentProduct.productWidthCm) : 8;
+  // Zona stampa: calcola px tenendo conto dei margini trasparenti del PNG
+  // Il PNG tshirt è 530px ma la t-shirt occupa solo 438px partendo da left=47
+  // Formula: margine_canvas + (cm / productWidthCm * larghezza_shirt_canvas)
   const pz = currentProduct?.printZoneCm;
-  const zone = pz
-    ? { left: Math.round(pz.x * cmToPx), top: Math.round(pz.y * cmToPx),
-        width: Math.round(pz.w * cmToPx), height: Math.round(pz.h * cmToPx) }
-    : (currentProduct?.printZone || { left:135, top:115, width:130, height:160 });
+  const CANVAS_W = 400;
+  // Margini PNG misurati con Pillow su ogni prodotto
+  const PNG_MARGINS = {
+    tshirt:       { left:47, top:26, shirtW:438, pngW:530 },
+    vneck:        { left:47, top:29, shirtW:438, pngW:530 },
+    felpa:        { left:0,  top:0,  shirtW:530, pngW:530 },
+    hoodie:       { left:0,  top:0,  shirtW:670, pngW:670 },
+    manica_lunga: { left:0,  top:0,  shirtW:530, pngW:530 },
+  };
+  const pm = PNG_MARGINS[product] || { left:0, top:0, shirtW:CANVAS_W, pngW:CANVAS_W };
+  const zone = (() => {
+    if (!pz) return currentProduct?.printZone || { left:135, top:115, width:130, height:160 };
+    const imgScale = CANVAS_W / pm.pngW;
+    const shirtLeft = pm.left  * imgScale;
+    const shirtTop  = pm.top   * imgScale;
+    const shirtW    = pm.shirtW * imgScale;
+    const cmPx = shirtW / (currentProduct?.productWidthCm || 50);
+    const z = {
+      left:   Math.round(shirtLeft + pz.x * cmPx),
+      top:    Math.round(shirtTop  + pz.y * cmPx),
+      width:  Math.round(pz.w * cmPx),
+      height: Math.round(pz.h * cmPx),
+    };
+    console.log('[ZONE]', product, z);
+    return z;
+  })();
   const scale = zoom / 100;
   const productColors = currentProduct?.colors || ['#ffffff','#000000'];
 
@@ -2234,7 +2257,6 @@ function DesignerApp() {
         const z = window._designerZone || zone;
         if (window._makeClipRect) obj.clipPath = window._makeClipRect(z);
       });
-
       // ClipPath real-time durante drag e ridimensionamento
       canvas.on('object:moving', () => canvas.requestRenderAll());
       canvas.on('object:scaling', () => canvas.requestRenderAll());
@@ -2411,9 +2433,7 @@ function DesignerApp() {
         top:  cy - estH / 2,
       });
       // Applica clipPath prima di add
-      const dbgZone = window._designerZone || zone;
-      console.log('[CLIP] zone=', JSON.stringify(dbgZone));
-      if (window._makeClipRect) obj.clipPath = window._makeClipRect(dbgZone);
+      if (window._makeClipRect) obj.clipPath = window._makeClipRect(window._designerZone || zone);
       obj._noClip = true;
       canvas.add(obj);
       // Dopo render corregge con dimensioni reali
