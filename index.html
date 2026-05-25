@@ -2457,7 +2457,9 @@ function DesignerApp() {
         top:  cy - estH / 2,
       });
       // Applica clipPath prima di add
-      if (window._makeClipRect) obj.clipPath = window._makeClipRect(window._designerZone || zone);
+      const dbgZone = window._designerZone || zone;
+      console.log('[DEBUG ClipPath] zone:', JSON.stringify(dbgZone), '| cx:', cx, 'cy:', cy, '| estW:', estW);
+      if (window._makeClipRect) obj.clipPath = window._makeClipRect(dbgZone);
       obj._noClip = true;
       canvas.add(obj);
       // Dopo render corregge con dimensioni reali
