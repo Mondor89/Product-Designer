@@ -2375,7 +2375,6 @@ function DesignerApp() {
         });
         // Applica clipPath prima di add
         if (window._makeClipRect) curvedObj.clipPath = window._makeClipRect(window._designerZone || zone);
-        curvedObj._noClip = true;
         // Posiziona con stima iniziale
         curvedObj.set({ left: cx - crvRadius - 10, top: cy - crvRadius * 0.4 });
         canvas.add(curvedObj);
@@ -2434,7 +2433,6 @@ function DesignerApp() {
       });
       // Applica clipPath prima di add
       if (window._makeClipRect) obj.clipPath = window._makeClipRect(window._designerZone || zone);
-      obj._noClip = true;
       canvas.add(obj);
       // Dopo render corregge con dimensioni reali
       setTimeout(() => {
@@ -2459,7 +2457,6 @@ function DesignerApp() {
         img._originalH = img.height;
         img.__uid = `img_${Date.now()}`;
         if (window._makeClipRect) img.clipPath = window._makeClipRect(window._designerZone || zone);
-        img._noClip = true;
         canvas.add(img); canvas.setActiveObject(img); canvas.renderAll();
         checkBounds();
       }, { crossOrigin: 'anonymous' });
@@ -2748,6 +2745,28 @@ function DesignerApp() {
             <canvas id="main-canvas" style={{
               position:'absolute', top:0, left:0, zIndex:3, width:400, height:svgH, background:'transparent',
             }} />
+
+            {/* ── Overlay mask zona stampa ─────────────────────────────
+                4 rettangoli grigi che coprono tutto fuori dalla zona stampa.
+                zIndex:6 = sopra al canvas (3) e alla zona tratteggiata (4).
+                Pointer-events:none = non bloccano il drag del testo.
+                Stessa tecnica di Lumise per mostrare il taglio netto. */}
+            {[
+              // sopra
+              { top:0, left:0, width:400, height:zone.top },
+              // sotto
+              { top:zone.top+zone.height, left:0, width:400, height:svgH-(zone.top+zone.height) },
+              // sinistra
+              { top:zone.top, left:0, width:zone.left, height:zone.height },
+              // destra
+              { top:zone.top, left:zone.left+zone.width, width:400-(zone.left+zone.width), height:zone.height },
+            ].map((r,i) => (
+              <div key={i} style={{
+                position:'absolute', zIndex:6, pointerEvents:'none',
+                background:'#ebeced',
+                top:r.top, left:r.left, width:r.width, height:r.height,
+              }} />
+            ))}
 
             {/* Preview mask — gestita fuori dallo stage per evitare problemi di scaling */}
           </div>
