@@ -91,11 +91,10 @@ window.AdminStore = {
           Destra:   null,
         },
         colors:['#ffffff','#000000','#e74c3c','#3498db','#2ecc71','#f39c12','#9b59b6'],
-        // zona stampa in CM — relativa al bordo sinistro/alto della t-shirt reale
+        // zona stampa in CM — larghezza reale prodotto = 50cm = 400px canvas
         printZoneCm:{ x:11, y:9, w:28, h:34 },
+        // larghezza reale prodotto in CM (per conversione CM→px)
         productWidthCm: 50,
-        // margini PNG misurati sul file originale 530×630px — usati per allineare la zona stampa
-        pngMargin:{ left:47, top:26, shirtW:438, pngW:530 },
       },
       {
         id:'felpa', name:'Felpa', icon:'🧥',
@@ -109,8 +108,6 @@ window.AdminStore = {
         colors:['#ffffff','#000000','#e74c3c','#2c3e50','#9b59b6'],
         printZoneCm:{ x:11, y:10, w:28, h:34 },
         productWidthCm: 50,
-        // PNG felpa senza margini trasparenti — aggiornare quando mockup definitivo pronto
-        pngMargin:{ left:0, top:0, shirtW:530, pngW:530 },
       },
       {
         id:'hoodie', name:'Hoodie', icon:'🧤',
@@ -124,8 +121,6 @@ window.AdminStore = {
         colors:['#ffffff','#000000','#e74c3c','#2c3e50','#3498db','#9b59b6'],
         printZoneCm:{ x:11, y:12, w:28, h:32 },
         productWidthCm: 50,
-        // PNG hoodie senza margini trasparenti — aggiornare quando mockup definitivo pronto
-        pngMargin:{ left:0, top:0, shirtW:670, pngW:670 },
       },
       {
         id:'manica_lunga', name:'Manica Lunga', icon:'👕',
@@ -139,8 +134,6 @@ window.AdminStore = {
         colors:['#ffffff','#000000','#e74c3c','#3498db','#2ecc71','#2c3e50'],
         printZoneCm:{ x:11, y:9, w:28, h:34 },
         productWidthCm: 50,
-        // PNG manica_lunga senza margini trasparenti — aggiornare quando mockup definitivo pronto
-        pngMargin:{ left:0, top:0, shirtW:530, pngW:530 },
       },
       {
         id:'vneck', name:'V-Neck', icon:'👔',
@@ -154,8 +147,6 @@ window.AdminStore = {
         colors:['#ffffff','#000000','#e74c3c','#3498db','#2ecc71','#f39c12'],
         printZoneCm:{ x:11, y:9, w:28, h:34 },
         productWidthCm: 50,
-        // margini PNG vneck misurati — stesso formato tshirt (stessa forma)
-        pngMargin:{ left:47, top:29, shirtW:438, pngW:530 },
       },
     ],
     cliparts: [
@@ -1922,29 +1913,13 @@ function DesignerApp() {
   const currentProduct = PRODUCTS.find((p) => p.id === product) || PRODUCTS[0];
   // Nome lato corrente (es. 'Fronte', 'Retro') — usato per caricare mockup
   const currentSideName = currentProduct?.sides?.[sideIndex] || 'Fronte';
-  // Zona stampa: calcola px tenendo conto dei margini trasparenti del PNG mockup
-  // Il PNG non è largo quanto il canvas — la t-shirt inizia a pngMargin.left pixel dal bordo
-  // Formula: margine_canvas + (posizione_cm / larghezza_cm * larghezza_shirt_canvas)
-  const pz  = currentProduct?.printZoneCm;
-  const pm  = currentProduct?.pngMargin;
-  const zone = (() => {
-    if (!pz) return currentProduct?.printZone || { left:135, top:115, width:130, height:160 };
-    const CANVAS_W = 400;
-    // Scala del PNG sul canvas (scaleToWidth)
-    const imgScale  = pm ? (CANVAS_W / pm.pngW) : 1;
-    // Posizione e dimensione della shirt nel canvas dopo la scala
-    const shirtLeft = pm ? pm.left  * imgScale : 0;
-    const shirtTop  = pm ? pm.top   * imgScale : 0;
-    const shirtW    = pm ? pm.shirtW * imgScale : CANVAS_W;
-    // 1cm in pixel canvas = larghezza_shirt_canvas / productWidthCm
-    const cmPx = shirtW / (currentProduct?.productWidthCm || 50);
-    return {
-      left:   Math.round(shirtLeft + pz.x * cmPx),
-      top:    Math.round(shirtTop  + pz.y * cmPx),
-      width:  Math.round(pz.w * cmPx),
-      height: Math.round(pz.h * cmPx),
-    };
-  })();
+  // Zona stampa: se prodotto ha printZoneCm, calcola px (1cm = 400/productWidthCm px)
+  const cmToPx = currentProduct?.productWidthCm ? (400 / currentProduct.productWidthCm) : 8;
+  const pz = currentProduct?.printZoneCm;
+  const zone = pz
+    ? { left: Math.round(pz.x * cmToPx), top: Math.round(pz.y * cmToPx),
+        width: Math.round(pz.w * cmToPx), height: Math.round(pz.h * cmToPx) }
+    : (currentProduct?.printZone || { left:135, top:115, width:130, height:160 });
   const scale = zoom / 100;
   const productColors = currentProduct?.colors || ['#ffffff','#000000'];
 
@@ -1986,25 +1961,6 @@ function DesignerApp() {
     });
     // setZoneWarning rimosso
     setImgQualityWarns(imgWarns.map(o => o.__uid));
-  }, [zone]);
-
-  // ── Riapplica clipPath a tutti gli oggetti quando la zona stampa cambia ──
-  // Es: cambio prodotto o primo mount con nuovi valori pngMargin corretti
-  useEffect(() => {
-    const canvas = window.DesignerCanvas;
-    if (!canvas || !window._makeClipRect) return;
-    window._designerZone = zone; // aggiorna zona globale
-    window._makeClipRect = (z) => new fabric.Rect({
-      left: z.left, top: z.top,
-      width: z.width, height: z.height,
-      absolutePositioned: true,
-    });
-    // Riapplica clipPath a tutti gli oggetti esistenti (tranne mockup overlay)
-    canvas.getObjects().forEach(obj => {
-      if (obj._noClip) return; // salta mockup overlay
-      obj.clipPath = window._makeClipRect(zone);
-    });
-    canvas.requestRenderAll();
   }, [zone]);
 
   // Preview rimosso
@@ -2279,9 +2235,7 @@ function DesignerApp() {
         if (window._makeClipRect) obj.clipPath = window._makeClipRect(z);
       });
 
-      // ── ClipPath real-time durante drag e ridimensionamento ───
-      // Fabric non aggiorna il clip durante il movimento — forziamo il ridisegno
-      // Il clipPath esiste già sull'oggetto, basta richiedere un nuovo render ad ogni frame
+      // ClipPath real-time durante drag e ridimensionamento
       canvas.on('object:moving', () => canvas.requestRenderAll());
       canvas.on('object:scaling', () => canvas.requestRenderAll());
 
@@ -2458,7 +2412,7 @@ function DesignerApp() {
       });
       // Applica clipPath prima di add
       const dbgZone = window._designerZone || zone;
-      console.log('[DEBUG ClipPath] zone:', JSON.stringify(dbgZone), '| cx:', cx, 'cy:', cy, '| estW:', estW);
+      console.log('[CLIP] zone=', JSON.stringify(dbgZone));
       if (window._makeClipRect) obj.clipPath = window._makeClipRect(dbgZone);
       obj._noClip = true;
       canvas.add(obj);
