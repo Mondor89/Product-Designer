@@ -1988,6 +1988,25 @@ function DesignerApp() {
     setImgQualityWarns(imgWarns.map(o => o.__uid));
   }, [zone]);
 
+  // ── Riapplica clipPath a tutti gli oggetti quando la zona stampa cambia ──
+  // Es: cambio prodotto o primo mount con nuovi valori pngMargin corretti
+  useEffect(() => {
+    const canvas = window.DesignerCanvas;
+    if (!canvas || !window._makeClipRect) return;
+    window._designerZone = zone; // aggiorna zona globale
+    window._makeClipRect = (z) => new fabric.Rect({
+      left: z.left, top: z.top,
+      width: z.width, height: z.height,
+      absolutePositioned: true,
+    });
+    // Riapplica clipPath a tutti gli oggetti esistenti (tranne mockup overlay)
+    canvas.getObjects().forEach(obj => {
+      if (obj._noClip) return; // salta mockup overlay
+      obj.clipPath = window._makeClipRect(zone);
+    });
+    canvas.requestRenderAll();
+  }, [zone]);
+
   // Preview rimosso
 
   // Init canvas + wheel zoom + pinch-to-zoom touch
