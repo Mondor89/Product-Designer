@@ -1954,15 +1954,16 @@ function DesignerApp() {
       window._canvasZoneW = cw;
       window._canvasZoneH = ch;
 
-      // Fabric crea .canvas-container — lo forziamo alle dimensioni della zona
-      // overflow:visible per far uscire le maniglie fuori dalla zona stampa
+      // Fabric avvolge <canvas> in .canvas-container e lo posiziona assoluto
+      // rispetto al parent (.canvas-stage). Dobbiamo spostarlo a zone.top/left
+      // perche il canvas element sta li nel DOM.
       const wrapper = el.parentElement;
       if (wrapper && wrapper.classList.contains('canvas-container')) {
-        wrapper.style.width  = cw + 'px';
-        wrapper.style.height = ch + 'px';
+        wrapper.style.width    = cw + 'px';
+        wrapper.style.height   = ch + 'px';
         wrapper.style.position = 'absolute';
-        wrapper.style.top  = '0';
-        wrapper.style.left = '0';
+        wrapper.style.top      = zone.top  + 'px';
+        wrapper.style.left     = zone.left + 'px';
         wrapper.style.overflow = 'visible';
       }
 
