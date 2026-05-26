@@ -1913,30 +1913,13 @@ function DesignerApp() {
   const currentProduct = PRODUCTS.find((p) => p.id === product) || PRODUCTS[0];
   // Nome lato corrente (es. 'Fronte', 'Retro') — usato per caricare mockup
   const currentSideName = currentProduct?.sides?.[sideIndex] || 'Fronte';
+  // Zona stampa: se prodotto ha printZoneCm, calcola px (1cm = 400/productWidthCm px)
+  const cmToPx = currentProduct?.productWidthCm ? (400 / currentProduct.productWidthCm) : 8;
   const pz = currentProduct?.printZoneCm;
-  const CANVAS_W = 400;
-  const PNG_MARGINS = {
-    tshirt:       { left:47, top:26, shirtW:438, pngW:530 },
-    vneck:        { left:47, top:29, shirtW:438, pngW:530 },
-    felpa:        { left:0,  top:0,  shirtW:530, pngW:530 },
-    hoodie:       { left:0,  top:0,  shirtW:670, pngW:670 },
-    manica_lunga: { left:0,  top:0,  shirtW:530, pngW:530 },
-  };
-  const pm = PNG_MARGINS[product] || { left:0, top:0, shirtW:CANVAS_W, pngW:CANVAS_W };
-  const zone = (() => {
-    if (!pz) return currentProduct?.printZone || { left:135, top:115, width:130, height:160 };
-    const imgScale = CANVAS_W / pm.pngW;
-    const shirtLeft = pm.left   * imgScale;
-    const shirtTop  = pm.top    * imgScale;
-    const shirtW    = pm.shirtW * imgScale;
-    const cmPx = shirtW / (currentProduct?.productWidthCm || 50);
-    return {
-      left:   Math.round(shirtLeft + pz.x * cmPx),
-      top:    Math.round(shirtTop  + pz.y * cmPx),
-      width:  Math.round(pz.w * cmPx),
-      height: Math.round(pz.h * cmPx),
-    };
-  })();
+  const zone = pz
+    ? { left: Math.round(pz.x * cmToPx), top: Math.round(pz.y * cmToPx),
+        width: Math.round(pz.w * cmToPx), height: Math.round(pz.h * cmToPx) }
+    : (currentProduct?.printZone || { left:135, top:115, width:130, height:160 });
   const scale = zoom / 100;
   const productColors = currentProduct?.colors || ['#ffffff','#000000'];
 
@@ -2251,8 +2234,6 @@ function DesignerApp() {
         const z = window._designerZone || zone;
         if (window._makeClipRect) obj.clipPath = window._makeClipRect(z);
       });
-      canvas.on('object:moving', () => canvas.requestRenderAll());
-      canvas.on('object:scaling', () => canvas.requestRenderAll());
 
 
       setTimeout(() => {
@@ -2734,21 +2715,6 @@ function DesignerApp() {
                 Zona stampa {currentProduct?.printZoneCm ? `${currentProduct.printZoneCm.w}×${currentProduct.printZoneCm.h}cm` : `${zone.width}×${zone.height}px`}
               </div>
             </div>
-
-            {/* ── Maschere fuori-zona: 4 div che coprono tutto ciò che esce dalla zona stampa ── */}
-            {/* Stesso colore dello sfondo esterno al canvas — nascondono visivamente il fuori-zona */}
-            {/* Top */}
-            <div style={{ position:'absolute', top:0, left:0, width:400, height:zone.top,
-              background:'#ebeced', zIndex:5, pointerEvents:'none' }} />
-            {/* Bottom */}
-            <div style={{ position:'absolute', top:zone.top+zone.height, left:0, width:400, height:svgH-(zone.top+zone.height),
-              background:'#ebeced', zIndex:5, pointerEvents:'none' }} />
-            {/* Left */}
-            <div style={{ position:'absolute', top:zone.top, left:0, width:zone.left, height:zone.height,
-              background:'#ebeced', zIndex:5, pointerEvents:'none' }} />
-            {/* Right */}
-            <div style={{ position:'absolute', top:zone.top, left:zone.left+zone.width, width:400-(zone.left+zone.width), height:zone.height,
-              background:'#ebeced', zIndex:5, pointerEvents:'none' }} />
 
             {/* Preview mask — gestita tramite clip-path sul canvas stage (vedi sotto) */}
 
