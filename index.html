@@ -29,7 +29,9 @@
   .panel-scroll::-webkit-scrollbar { width: 4px; }
   .canvas-stage { touch-action: none; }
   /* canvas-container creato da Fabric — posizione gestita dal wrapper clip, non forziamo top/left */
-  .canvas-stage .canvas-container { position: absolute !important; }
+  .canvas-stage .canvas-container { position: absolute !important; overflow: visible !important; }
+  /* Il canvas piccolo (zona stampa) taglia gli oggetti — le maniglie escono fuori */
+  .canvas-stage canvas { overflow: visible !important; }
   .colors-scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; }
   .colors-scroll::-webkit-scrollbar { height: 3px; }
   .colors-scroll::-webkit-scrollbar-thumb { background: #3fc7ba; border-radius: 2px; }
@@ -2160,20 +2162,35 @@ function DesignerApp() {
       canvas.on('object:added', () => { DesignerHistory.save(canvas); checkBounds(); });
       canvas.on('object:removed', () => checkBounds());
 
-      // ── Rotella del mouse → zoom (desktop) ─────────────────────
+      // ── Zoom via canvas.zoomToPoint() — testo sempre nitido (stile Lumise) ──
+      // Il CSS scale resta solo per baseScale (fit schermo).
+      // Lo zoom utente usa Fabric zoomToPoint centrato sul centro del canvas.
+      // Min zoom = 1 (100%), max zoom = 2 (200%).
       const canvasEl = canvas.getElement().parentElement;
+
+      // Centro del canvas (= centro zona stampa) in coordinate canvas
+      const zoomCenter = new fabric.Point(cw / 2, ch / 2);
+
+      const applyFabricZoom = (newZoomPct) => {
+        const fabricZoom = Math.min(2, Math.max(1, newZoomPct / 100));
+        canvas.zoomToPoint(zoomCenter, fabricZoom);
+      };
+
       const onWheel = (e) => {
         e.preventDefault();
-        // Rotella su = zoom in, giù = zoom out (min 100 = fit schermo)
         setZoom(z => {
           const delta = e.deltaY > 0 ? -8 : 8;
-          return Math.min(200, Math.max(100, z + delta));
+          const next = Math.min(200, Math.max(100, z + delta));
+          applyFabricZoom(next);
+          return next;
         });
       };
       canvasEl.addEventListener('wheel', onWheel, { passive: false });
 
+      // Esponi applyFabricZoom globalmente per slider e pinch
+      window._applyFabricZoom = applyFabricZoom;
+
       // ── Pinch-to-zoom touch (mobile + tablet) ───────────────────
-      // Stesso zoom dello slider — min 100 (fit schermo), max 200
       let lastDist = null;
       const onTouchStart = (e) => {
         if (e.touches.length === 2) lastDist = null;
@@ -2185,9 +2202,12 @@ function DesignerApp() {
         const dy = e.touches[0].clientY - e.touches[1].clientY;
         const dist = Math.sqrt(dx*dx + dy*dy);
         if (lastDist !== null) {
-          const delta = (dist - lastDist) * 0.4; // sensibilità pinch
-          setZoom(z => Math.min(200, Math.max(100, z + delta)));
-          // Mostra barra zoom mentre si pincha, nasconde dopo 2s
+          const delta = (dist - lastDist) * 0.4;
+          setZoom(z => {
+            const next = Math.min(200, Math.max(100, z + delta));
+            applyFabricZoom(next);
+            return next;
+          });
           showZoomBarTemp();
         }
         lastDist = dist;
@@ -2496,8 +2516,9 @@ function DesignerApp() {
   const [mobileActiveTab, setMobileActiveTab] = useState(null);
   // stageRef rimosso — preview gestita via Fabric.js
 
-  // canvasScale = fit base * zoom utente (zoom state condiviso desktop+mobile)
-  const canvasScale = baseScale * (zoom / 100);
+  // canvasScale = solo baseScale (fit schermo)
+  // Lo zoom utente e gestito da canvas.zoomToPoint() di Fabric — vettori nitidi
+  const canvasScale = baseScale;
 
 
 
@@ -2546,14 +2567,14 @@ function DesignerApp() {
           <>
             <div style={{ width:1, height:28, background:'rgba(255,255,255,0.1)', margin:'0 2px', flexShrink:0 }} />
             <div style={{ display:'flex', alignItems:'center', gap:5, flexShrink:0 }}>
-              <button onClick={() => setZoom(z => Math.max(100, z-10))}
+              <button onClick={() => { const n = Math.max(100, zoom-10); setZoom(n); if(window._applyFabricZoom) window._applyFabricZoom(n); }}
                 style={{ background:'rgba(255,255,255,0.08)', border:'none', color:'#aaa',
                   borderRadius:4, width:20, height:20, cursor:'pointer', fontSize:14,
                   display:'flex', alignItems:'center', justifyContent:'center', lineHeight:1 }}>–</button>
               <input type="range" min={100} max={200} value={Math.round(zoom)}
-                onChange={e => setZoom(+e.target.value)}
+                onChange={e => { const n = +e.target.value; setZoom(n); if(window._applyFabricZoom) window._applyFabricZoom(n); }}
                 style={{ width:80, accentColor:'#3fc7ba', cursor:'pointer' }} />
-              <button onClick={() => setZoom(z => Math.min(200, z+10))}
+              <button onClick={() => { const n = Math.min(200, zoom+10); setZoom(n); if(window._applyFabricZoom) window._applyFabricZoom(n); }}
                 style={{ background:'rgba(255,255,255,0.08)', border:'none', color:'#aaa',
                   borderRadius:4, width:20, height:20, cursor:'pointer', fontSize:14,
                   display:'flex', alignItems:'center', justifyContent:'center', lineHeight:1, flexShrink:0 }}>+</button>
@@ -2651,7 +2672,7 @@ function DesignerApp() {
               width:400, height:svgH,
               display: product ? 'block' : 'none',
               transform:'scale(' + canvasScale + ')',
-              transformOrigin:'center top',
+              transformOrigin:'center top', /* baseScale fit schermo */
               transition:'transform 0.2s',
               marginTop: isMobile ? 4 : 0,
               flexShrink: 0,
@@ -2814,7 +2835,7 @@ function DesignerApp() {
                     type="range"
                     min={100} max={200}
                     value={Math.round(zoom)}
-                    onChange={e => setZoom(+e.target.value)}
+                    onChange={e => { const n = +e.target.value; setZoom(n); if(window._applyFabricZoom) window._applyFabricZoom(n); }}
                     style={{ flex: 1, accentColor: '#3fc7ba', cursor: 'pointer', height: 4 }}
                   />
                   {/* Bottone + */}
