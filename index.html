@@ -2373,8 +2373,6 @@ function DesignerApp() {
             DesignerHistory.save(canvas);
           }
         });
-        // Applica clipPath prima di add
-        if (window._makeClipRect) curvedObj.clipPath = window._makeClipRect(window._designerZone || zone);
         // Posiziona con stima iniziale
         curvedObj.set({ left: cx - crvRadius - 10, top: cy - crvRadius * 0.4 });
         canvas.add(curvedObj);
@@ -2387,6 +2385,8 @@ function DesignerApp() {
             top:  cy - br.height / 2,
           });
           curvedObj.setCoords();
+          // Applica clipPath dopo posizione corretta
+          if (window._makeClipRect) { curvedObj.clipPath = window._makeClipRect(window._designerZone || zone); curvedObj.setCoords(); }
           canvas.setActiveObject(curvedObj);
           canvas.renderAll();
           DesignerHistory.save(canvas);
@@ -2431,10 +2431,8 @@ function DesignerApp() {
         left: cx - estW / 2,
         top:  cy - estH / 2,
       });
-      // Applica clipPath prima di add
-      if (window._makeClipRect) obj.clipPath = window._makeClipRect(window._designerZone || zone);
       canvas.add(obj);
-      // Dopo render corregge con dimensioni reali
+      // Dopo render corregge con dimensioni reali, poi applica clipPath
       setTimeout(() => {
         canvas.renderAll();
         const br = obj.getBoundingRect(false, true);
@@ -2443,6 +2441,11 @@ function DesignerApp() {
           top:  cy - br.height / 2,
         });
         obj.setCoords();
+        // Applica clipPath dopo che l'oggetto è sul canvas con posizione corretta
+        if (window._makeClipRect) {
+          obj.clipPath = window._makeClipRect(window._designerZone || zone);
+          obj.setCoords();
+        }
         canvas.setActiveObject(obj);
         canvas.renderAll();
         DesignerHistory.save(canvas);
@@ -2456,8 +2459,10 @@ function DesignerApp() {
         img._originalW = img.width;
         img._originalH = img.height;
         img.__uid = `img_${Date.now()}`;
-        if (window._makeClipRect) img.clipPath = window._makeClipRect(window._designerZone || zone);
-        canvas.add(img); canvas.setActiveObject(img); canvas.renderAll();
+        canvas.add(img);
+        // Applica clipPath dopo add
+        if (window._makeClipRect) { img.clipPath = window._makeClipRect(window._designerZone || zone); img.setCoords(); }
+        canvas.setActiveObject(img); canvas.renderAll();
         checkBounds();
       }, { crossOrigin: 'anonymous' });
 
