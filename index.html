@@ -1884,6 +1884,20 @@ function DesignerApp() {
   const [canvasReady, setCanvasReady] = useState(false);
   // zoom è moltiplicatore relativo al baseScale: 100 = fit schermo, 200 = doppio
   const [zoom, setZoom] = useState(100);
+  // applyZoom: aggiorna sia lo stato UI che il canvas Fabric con zoomToPoint
+  const applyZoom = React.useCallback((newPct) => {
+    const pct = Math.min(300, Math.max(100, newPct));
+    setZoom(pct);
+    const canvas = window.DesignerCanvas;
+    if (!canvas) return;
+    const z = window._designerZone;
+    if (!z) return;
+    canvas.zoomToPoint(
+      new fabric.Point(z.left + z.width / 2, z.top + z.height / 2),
+      pct / 100
+    );
+    canvas.requestRenderAll();
+  }, []);
   // clampZoom: mai sotto 100 (non si rimpicciolisce oltre il fit)
   const clampZoom = (z) => Math.min(200, Math.max(100, Math.round(z)));
   // Stato UI zoom mobile: barra visibile o no
@@ -2186,16 +2200,26 @@ function DesignerApp() {
       const canvasEl = canvas.getElement().parentElement;
       const onWheel = (e) => {
         e.preventDefault();
-        // Rotella su = zoom in, giù = zoom out (min 100 = fit schermo)
-        setZoom(z => {
-          const delta = e.deltaY > 0 ? -8 : 8;
-          return Math.min(200, Math.max(100, z + delta));
-        });
+        const canvas = window.DesignerCanvas;
+        if (!canvas) return;
+        // Zoom Fabric nativo — come Lumise: ridisegna vettori, nessuna sfocatura
+        const delta = e.deltaY > 0 ? -0.08 : 0.08;
+        let newZoom = canvas.getZoom() + delta;
+        newZoom = Math.min(3.0, Math.max(1.0, newZoom));
+        // Zoom centrato sulla zona stampa — come Lumise
+        const z = window._designerZone || zone;
+        canvas.zoomToPoint(
+          new fabric.Point(z.left + z.width / 2, z.top + z.height / 2),
+          newZoom
+        );
+        // Aggiorna stato zoom per slider UI (converti a percentuale)
+        setZoom(Math.round(newZoom * 100));
+        showZoomBarTemp();
+        canvas.requestRenderAll();
       };
       canvasEl.addEventListener('wheel', onWheel, { passive: false });
 
       // ── Pinch-to-zoom touch (mobile + tablet) ───────────────────
-      // Stesso zoom dello slider — min 100 (fit schermo), max 200
       let lastDist = null;
       const onTouchStart = (e) => {
         if (e.touches.length === 2) lastDist = null;
@@ -2207,10 +2231,19 @@ function DesignerApp() {
         const dy = e.touches[0].clientY - e.touches[1].clientY;
         const dist = Math.sqrt(dx*dx + dy*dy);
         if (lastDist !== null) {
-          const delta = (dist - lastDist) * 0.4; // sensibilità pinch
-          setZoom(z => Math.min(200, Math.max(100, z + delta)));
-          // Mostra barra zoom mentre si pincha, nasconde dopo 2s
+          const canvas = window.DesignerCanvas;
+          if (!canvas) return;
+          const delta = (dist - lastDist) * 0.004; // sensibilità pinch
+          let newZoom = canvas.getZoom() + delta;
+          newZoom = Math.min(3.0, Math.max(1.0, newZoom));
+          const z = window._designerZone || zone;
+          canvas.zoomToPoint(
+            new fabric.Point(z.left + z.width / 2, z.top + z.height / 2),
+            newZoom
+          );
+          setZoom(Math.round(newZoom * 100));
           showZoomBarTemp();
+          canvas.requestRenderAll();
         }
         lastDist = dist;
       };
@@ -2267,8 +2300,7 @@ function DesignerApp() {
     if (c) {
       const json = c.toJSON(['id']);
       setSideData((d) => ({ ...d, [currentSideKey]: json }));
-      // Aggiorna zona globale per nuovi oggetti
-      const newZone = zone; // zona calcolata da printZoneCm in tempo reale
+      const newZone = zone;
       window._designerZone = newZone;
       const nextKey = `${newProduct}_${newSide}`;
       const nextData = sideData[nextKey];
@@ -2277,10 +2309,15 @@ function DesignerApp() {
       } else {
         c.clear();c.renderAll();
       }
+      // Reset zoom Fabric a 1 quando si cambia prodotto/lato
+      c.setZoom(1);
+      c.viewportTransform = [1,0,0,1,0,0];
+      c.requestRenderAll();
     }
+    setZoom(100);
     setProduct(newProduct);
     setSideIndex(newSide);
-    setMockupKey(k => k + 1); // forza reload mockup anche se stesso prodotto
+    setMockupKey(k => k + 1);
   };
 
   useEffect(() => {
@@ -2529,8 +2566,8 @@ function DesignerApp() {
   const [mobileActiveTab, setMobileActiveTab] = useState(null);
   // stageRef rimosso — preview gestita via Fabric.js
 
-  // canvasScale = fit base * zoom utente (zoom state condiviso desktop+mobile)
-  const canvasScale = baseScale * (zoom / 100);
+  // canvasScale = solo fit schermo — lo zoom utente è gestito da Fabric zoomToPoint
+  const canvasScale = baseScale;
 
 
 
@@ -2579,14 +2616,14 @@ function DesignerApp() {
           <>
             <div style={{ width:1, height:28, background:'rgba(255,255,255,0.1)', margin:'0 2px', flexShrink:0 }} />
             <div style={{ display:'flex', alignItems:'center', gap:5, flexShrink:0 }}>
-              <button onClick={() => setZoom(z => Math.max(100, z-10))}
+              <button onClick={() => applyZoom(zoom - 10)}
                 style={{ background:'rgba(255,255,255,0.08)', border:'none', color:'#aaa',
                   borderRadius:4, width:20, height:20, cursor:'pointer', fontSize:14,
                   display:'flex', alignItems:'center', justifyContent:'center', lineHeight:1 }}>–</button>
               <input type="range" min={100} max={200} value={Math.round(zoom)}
-                onChange={e => setZoom(+e.target.value)}
+                onChange={e => applyZoom(+e.target.value)}
                 style={{ width:80, accentColor:'#3fc7ba', cursor:'pointer' }} />
-              <button onClick={() => setZoom(z => Math.min(200, z+10))}
+              <button onClick={() => applyZoom(zoom + 10)}
                 style={{ background:'rgba(255,255,255,0.08)', border:'none', color:'#aaa',
                   borderRadius:4, width:20, height:20, cursor:'pointer', fontSize:14,
                   display:'flex', alignItems:'center', justifyContent:'center', lineHeight:1, flexShrink:0 }}>+</button>
@@ -2718,10 +2755,9 @@ function DesignerApp() {
 
             {/* Preview mask — gestita tramite clip-path sul canvas stage (vedi sotto) */}
 
-            {/* Fabric canvas — clip-path CSS taglia visivamente tutto fuori dalla zona stampa */}
+            {/* Fabric canvas */}
             <canvas id="main-canvas" style={{
               position:'absolute', top:0, left:0, zIndex:3, width:400, height:svgH, background:'transparent',
-              clipPath: `inset(${zone.top}px ${400-(zone.left+zone.width)}px ${svgH-(zone.top+zone.height)}px ${zone.left}px)`,
             }} />
 
             {/* Preview mask — gestita fuori dallo stage per evitare problemi di scaling */}
@@ -2836,7 +2872,7 @@ function DesignerApp() {
                     type="range"
                     min={100} max={200}
                     value={Math.round(zoom)}
-                    onChange={e => setZoom(+e.target.value)}
+                    onChange={e => applyZoom(+e.target.value)}
                     style={{ flex: 1, accentColor: '#3fc7ba', cursor: 'pointer', height: 4 }}
                   />
                   {/* Bottone + */}
