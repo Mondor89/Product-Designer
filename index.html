@@ -2151,12 +2151,13 @@ function DesignerApp() {
         const tl = { x: z.left*vt[0]+vt[4], y: z.top*vt[3]+vt[5] };
         const br = { x: (z.left+z.width)*vt[0]+vt[4], y: (z.top+z.height)*vt[3]+vt[5] };
         const cw=400, ch=canvas.getHeight();
-        // Clip-path sul wrapper Fabric (canvas-container) — taglia anche i controlli
-        const wrapper = canvas.getElement()?.parentElement;
-        if (wrapper) {
-          wrapper.style.clipPath = `inset(${Math.max(0,tl.y)}px ${Math.max(0,cw-br.x)}px ${Math.max(0,ch-br.y)}px ${Math.max(0,tl.x)}px)`;
-          wrapper.style.overflow = 'visible';
-        }
+        // Aggiorna i 4 div maschera attorno alla zona stampa
+        const mt=document.getElementById('ws-mask-top'), mb=document.getElementById('ws-mask-bot');
+        const ml=document.getElementById('ws-mask-left'), mr=document.getElementById('ws-mask-right');
+        if (mt) { mt.style.height=Math.max(0,tl.y)+'px'; }
+        if (mb) { mb.style.top=(br.y)+'px'; mb.style.height=Math.max(0,ch-br.y)+'px'; }
+        if (ml) { ml.style.top=tl.y+'px'; ml.style.width=Math.max(0,tl.x)+'px'; ml.style.height=(br.y-tl.y)+'px'; }
+        if (mr) { mr.style.top=tl.y+'px'; mr.style.left=br.x+'px'; mr.style.width=Math.max(0,cw-br.x)+'px'; mr.style.height=(br.y-tl.y)+'px'; }
         // Zona tratteggiata segue lo zoom
         const ol = document.getElementById('print-zone-outline');
         if (ol) { ol.style.left=tl.x+'px'; ol.style.top=tl.y+'px'; ol.style.width=(br.x-tl.x)+'px'; ol.style.height=(br.y-tl.y)+'px'; }
@@ -2689,6 +2690,12 @@ function DesignerApp() {
             <img id="ws-mockup-img" src="" alt=""
               style={{ position:'absolute', top:0, left:0, width:400, height:svgH,
                 zIndex:2, pointerEvents:'none', objectFit:'cover' }} />
+
+            {/* 4 maschere grigie — coprono tutto fuori dalla zona stampa, aggiornate via after:render */}
+            <div id="ws-mask-top"  style={{ position:'absolute', top:0, left:0, width:400, height:zone.top, background:'#ebeced', zIndex:5, pointerEvents:'none' }} />
+            <div id="ws-mask-bot"  style={{ position:'absolute', top:zone.top+zone.height, left:0, width:400, height:svgH-(zone.top+zone.height), background:'#ebeced', zIndex:5, pointerEvents:'none' }} />
+            <div id="ws-mask-left" style={{ position:'absolute', top:zone.top, left:0, width:zone.left, height:zone.height, background:'#ebeced', zIndex:5, pointerEvents:'none' }} />
+            <div id="ws-mask-right" style={{ position:'absolute', top:zone.top, left:zone.left+zone.width, width:400-(zone.left+zone.width), height:zone.height, background:'#ebeced', zIndex:5, pointerEvents:'none' }} />
 
             {/* Zona stampa tratteggiata */}
             {/* Zona tratteggiata — id per toggle DOM diretto senza re-render */}
