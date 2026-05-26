@@ -1799,8 +1799,8 @@ function DesignerApp() {
   // mantenendo luminosità → ombre e pieghe restano visibili
   // Funziona perché: pixel trasparenti (sfondo) → saltati → sfondo grigio visibile
   //                  pixel opachi (t-shirt bianca) → colorati col colore scelto
-  //                  NUOVO: risultato scritto su <img id="ws-mockup-img"> HTML
-  //                  Il canvas Fabric è ora trasparente — mockup fuori da Fabric
+  //                  NUOVO: mockup colorato salvato in window._mockupImage
+  //                  L'overlay canvas 2D lo disegna insieme ai 4 rettangoli grigi
   useEffect(() => {
     const timer = setTimeout(() => {
     // Pulisci eventuali oggetti mockup residui dal canvas Fabric
@@ -1813,16 +1813,11 @@ function DesignerApp() {
       canvas.renderAll();
     }
 
-    // Trova l'img HTML del mockup nel DOM
-    const mockupEl = document.getElementById('ws-mockup-img');
-    if (!mockupEl) return;
-
-    // Colora mockup via canvas 2D — no CORS perché URL Netlify è same-origin
     const _cp = PRODUCTS.find(p => p.id === product) || PRODUCTS[0];
     const _side = _cp?.sides?.[sideIndex] || 'Fronte';
     const mockupUrl = `/mockups/${product}/${_side === 'Fronte' ? 'fronte' : 'retro'}.png`;
     const loadToken = Date.now();
-    mockupEl._loadToken = loadToken;
+    window._mockupLoadToken = loadToken;
 
     const hexToRgb = (hex) => [
       parseInt(hex.slice(1,3),16),
@@ -1832,9 +1827,9 @@ function DesignerApp() {
 
     const img = new Image();
     img.onload = () => {
-      if (mockupEl._loadToken !== loadToken) return;
+      if (window._mockupLoadToken !== loadToken) return;
 
-      // Canvas 2D offscreen per manipolazione pixel
+      // Canvas 2D offscreen per pixel coloring
       const offscreen = document.createElement('canvas');
       offscreen.width = img.width;
       offscreen.height = img.height;
@@ -1847,8 +1842,7 @@ function DesignerApp() {
       const [tr, tg, tb] = hexToRgb(col);
 
       for (let i = 0; i < data.length; i += 4) {
-        if (data[i+3] < 10) continue; // pixel trasparente → salta
-        // Luminosità pixel originale — mantiene ombre e pieghe
+        if (data[i+3] < 10) continue;
         const lum = (data[i] + data[i+1] + data[i+2]) / 3 / 255;
         data[i]   = Math.round(tr * lum);
         data[i+1] = Math.round(tg * lum);
@@ -1856,8 +1850,14 @@ function DesignerApp() {
       }
       ctx.putImageData(imageData, 0, 0);
 
-      // Scrivi il risultato direttamente nell'<img> HTML — non in Fabric
-      mockupEl.src = offscreen.toDataURL();
+      // Salva il mockup colorato come Image pronta per drawImage
+      const coloredImg = new Image();
+      coloredImg.onload = () => {
+        window._mockupImage = coloredImg;
+        // Forza ridisegno overlay
+        if (canvas) canvas.renderAll();
+      };
+      coloredImg.src = offscreen.toDataURL();
     };
     img.src = mockupUrl;
     }, 50);
@@ -2222,14 +2222,21 @@ function DesignerApp() {
           const z = window._designerZone;
           if (!z || !overlayCtx) return;
           overlayCtx.clearRect(0, 0, 400, svgH);
+
+          // 1. Disegna mockup colorato (sotto i rettangoli grigi)
+          if (window._mockupImage) {
+            overlayCtx.drawImage(window._mockupImage, 0, 0, 400, svgH);
+          }
+
+          // 2. Disegna 4 rettangoli grigi sopra il mockup fuori dalla zona stampa
           overlayCtx.fillStyle = '#ebeced';
           // TOP
           overlayCtx.fillRect(0, 0, 400, z.top);
           // BOTTOM
           overlayCtx.fillRect(0, z.top + z.height, 400, svgH - z.top - z.height);
-          // LEFT (solo fascia laterale altezza zona)
+          // LEFT
           overlayCtx.fillRect(0, z.top, z.left, z.height);
-          // RIGHT (solo fascia laterale altezza zona)
+          // RIGHT
           overlayCtx.fillRect(z.left + z.width, z.top, 400 - z.left - z.width, z.height);
         };
         // Disegna subito e ad ogni render Fabric
@@ -2699,17 +2706,7 @@ function DesignerApp() {
               zIndex:1, pointerEvents:'none',
             }} />
 
-            {/* Mockup colorato via pixel coloring — scritto su img HTML, NON su Fabric */}
-            {/* Sta fuori dal wrapper clip, non viene tagliato dalla zona stampa */}
-            <img id="ws-mockup-img" alt=""
-              style={{
-                position:'absolute', top:0, left:0,
-                width:400, height:svgH,
-                objectFit:'fill',
-                zIndex:2, pointerEvents:'none',
-                display: product ? 'block' : 'none',
-              }}
-            />
+            {/* Mockup disegnato direttamente sull'overlay canvas 2D */}
 
             {/* Zona stampa tratteggiata */}
             {/* Zona tratteggiata — id per toggle DOM diretto senza re-render */}
