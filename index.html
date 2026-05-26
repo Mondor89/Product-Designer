@@ -2206,8 +2206,36 @@ function DesignerApp() {
       canvasEl.addEventListener('touchmove', onTouchMove, { passive: false });
       canvasEl.addEventListener('touchend', onTouchEnd, { passive: true });
 
-      // zona disponibile globalmente per i 4 div overlay
+      // zona disponibile globalmente per l'overlay canvas
       window._designerZone = zone;
+
+      // ── Overlay canvas 2D — ridisegna 4 rettangoli grigi fuori zona ──
+      // Si aggancia ad after:render di Fabric: ad ogni frame Fabric ridisegna
+      // gli oggetti, poi noi ridisegniamo i 4 rettangoli sopra.
+      // pointerEvents:none sul canvas overlay → click passano al canvas Fabric.
+      const overlayEl = document.getElementById('overlay-canvas');
+      if (overlayEl) {
+        overlayEl.width  = 400;
+        overlayEl.height = svgH;
+        const overlayCtx = overlayEl.getContext('2d');
+        const drawOverlay = () => {
+          const z = window._designerZone;
+          if (!z || !overlayCtx) return;
+          overlayCtx.clearRect(0, 0, 400, svgH);
+          overlayCtx.fillStyle = '#ebeced';
+          // TOP
+          overlayCtx.fillRect(0, 0, 400, z.top);
+          // BOTTOM
+          overlayCtx.fillRect(0, z.top + z.height, 400, svgH - z.top - z.height);
+          // LEFT (solo fascia laterale altezza zona)
+          overlayCtx.fillRect(0, z.top, z.left, z.height);
+          // RIGHT (solo fascia laterale altezza zona)
+          overlayCtx.fillRect(z.left + z.width, z.top, 400 - z.left - z.width, z.height);
+        };
+        // Disegna subito e ad ogni render Fabric
+        drawOverlay();
+        canvas.on('after:render', drawOverlay);
+      }
 
 
       setTimeout(() => {
@@ -2678,7 +2706,7 @@ function DesignerApp() {
                 position:'absolute', top:0, left:0,
                 width:400, height:svgH,
                 objectFit:'fill',
-                zIndex:4, pointerEvents:'none',
+                zIndex:2, pointerEvents:'none',
                 display: product ? 'block' : 'none',
               }}
             />
@@ -2700,28 +2728,16 @@ function DesignerApp() {
             {/* Canvas Fabric — pieno, nessun clip interno */}
             <canvas id="main-canvas" style={{
               position:'absolute', top:0, left:0,
-              zIndex:2, width:400, height:svgH,
+              zIndex:3, width:400, height:svgH,
               background:'transparent',
             }} />
 
-            {/* 4 rettangoli grigi che coprono le aree FUORI dalla zona stampa */}
-            {/* zIndex:5 = sopra canvas e mockup, sotto i controlli Fabric (zIndex>100) */}
-            {/* Striscia TOP — da 0 a zone.top */}
-            <div style={{ position:'absolute', top:0, left:0,
-              width:400, height:zone.top,
-              background:'#ebeced', zIndex:3, pointerEvents:'none' }} />
-            {/* Striscia BOTTOM — da zone.top+zone.height a fondo */}
-            <div style={{ position:'absolute', top:zone.top+zone.height, left:0,
-              width:400, height:svgH - zone.top - zone.height,
-              background:'#ebeced', zIndex:3, pointerEvents:'none' }} />
-            {/* Striscia LEFT — solo la fascia laterale sinistra (altezza zona) */}
-            <div style={{ position:'absolute', top:zone.top, left:0,
-              width:zone.left, height:zone.height,
-              background:'#ebeced', zIndex:3, pointerEvents:'none' }} />
-            {/* Striscia RIGHT — solo la fascia laterale destra (altezza zona) */}
-            <div style={{ position:'absolute', top:zone.top, left:zone.left+zone.width,
-              width:400 - zone.left - zone.width, height:zone.height,
-              background:'#ebeced', zIndex:3, pointerEvents:'none' }} />
+            {/* Canvas overlay 2D — ridisegna 4 rettangoli grigi fuori zona ad ogni after:render */}
+            <canvas id="overlay-canvas" style={{
+              position:'absolute', top:0, left:0,
+              zIndex:4, width:400, height:svgH,
+              pointerEvents:'none',
+            }} />
 
             {/* Preview mask — gestita fuori dallo stage per evitare problemi di scaling */}
           </div>
