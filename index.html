@@ -1869,7 +1869,6 @@ function DesignerApp() {
           _noClip: true,
         });
         canvas.add(fImg);
-        fImg.clipPath = null; // sicurezza: il mockup non deve mai avere clipPath
         canvas.bringToFront(fImg);
         canvas.renderAll();
       });
@@ -1914,12 +1913,8 @@ function DesignerApp() {
   const currentProduct = PRODUCTS.find((p) => p.id === product) || PRODUCTS[0];
   // Nome lato corrente (es. 'Fronte', 'Retro') — usato per caricare mockup
   const currentSideName = currentProduct?.sides?.[sideIndex] || 'Fronte';
-  // Zona stampa: calcola px tenendo conto dei margini trasparenti del PNG
-  // Il PNG tshirt è 530px ma la t-shirt occupa solo 438px partendo da left=47
-  // Formula: margine_canvas + (cm / productWidthCm * larghezza_shirt_canvas)
   const pz = currentProduct?.printZoneCm;
   const CANVAS_W = 400;
-  // Margini PNG misurati con Pillow su ogni prodotto
   const PNG_MARGINS = {
     tshirt:       { left:47, top:26, shirtW:438, pngW:530 },
     vneck:        { left:47, top:29, shirtW:438, pngW:530 },
@@ -1931,18 +1926,16 @@ function DesignerApp() {
   const zone = (() => {
     if (!pz) return currentProduct?.printZone || { left:135, top:115, width:130, height:160 };
     const imgScale = CANVAS_W / pm.pngW;
-    const shirtLeft = pm.left  * imgScale;
-    const shirtTop  = pm.top   * imgScale;
+    const shirtLeft = pm.left   * imgScale;
+    const shirtTop  = pm.top    * imgScale;
     const shirtW    = pm.shirtW * imgScale;
     const cmPx = shirtW / (currentProduct?.productWidthCm || 50);
-    const z = {
+    return {
       left:   Math.round(shirtLeft + pz.x * cmPx),
       top:    Math.round(shirtTop  + pz.y * cmPx),
       width:  Math.round(pz.w * cmPx),
       height: Math.round(pz.h * cmPx),
     };
-    console.log('[ZONE]', product, z);
-    return z;
   })();
   const scale = zoom / 100;
   const productColors = currentProduct?.colors || ['#ffffff','#000000'];
@@ -2254,11 +2247,10 @@ function DesignerApp() {
       // Applica clipPath a ogni nuovo oggetto aggiunto
       canvas.on('object:added', (e) => {
         const obj = e.target;
-        if (!obj || obj._noClip || obj._isMockupOverlay || obj.clipPath) return;
+        if (!obj || obj._noClip || obj.clipPath) return;
         const z = window._designerZone || zone;
         if (window._makeClipRect) obj.clipPath = window._makeClipRect(z);
       });
-      // ClipPath real-time durante drag e ridimensionamento
       canvas.on('object:moving', () => canvas.requestRenderAll());
       canvas.on('object:scaling', () => canvas.requestRenderAll());
 
@@ -2374,6 +2366,9 @@ function DesignerApp() {
             DesignerHistory.save(canvas);
           }
         });
+        // Applica clipPath prima di add
+        if (window._makeClipRect) curvedObj.clipPath = window._makeClipRect(window._designerZone || zone);
+        curvedObj._noClip = true;
         // Posiziona con stima iniziale
         curvedObj.set({ left: cx - crvRadius - 10, top: cy - crvRadius * 0.4 });
         canvas.add(curvedObj);
@@ -2386,8 +2381,6 @@ function DesignerApp() {
             top:  cy - br.height / 2,
           });
           curvedObj.setCoords();
-          // Applica clipPath dopo posizione corretta
-          if (window._makeClipRect) { curvedObj.clipPath = window._makeClipRect(window._designerZone || zone); curvedObj.setCoords(); }
           canvas.setActiveObject(curvedObj);
           canvas.renderAll();
           DesignerHistory.save(canvas);
@@ -2432,8 +2425,11 @@ function DesignerApp() {
         left: cx - estW / 2,
         top:  cy - estH / 2,
       });
+      // Applica clipPath prima di add
+      if (window._makeClipRect) obj.clipPath = window._makeClipRect(window._designerZone || zone);
+      obj._noClip = true;
       canvas.add(obj);
-      // Dopo render corregge con dimensioni reali, poi applica clipPath
+      // Dopo render corregge con dimensioni reali
       setTimeout(() => {
         canvas.renderAll();
         const br = obj.getBoundingRect(false, true);
@@ -2442,11 +2438,6 @@ function DesignerApp() {
           top:  cy - br.height / 2,
         });
         obj.setCoords();
-        // Applica clipPath dopo che l'oggetto è sul canvas con posizione corretta
-        if (window._makeClipRect) {
-          obj.clipPath = window._makeClipRect(window._designerZone || zone);
-          obj.setCoords();
-        }
         canvas.setActiveObject(obj);
         canvas.renderAll();
         DesignerHistory.save(canvas);
@@ -2460,10 +2451,9 @@ function DesignerApp() {
         img._originalW = img.width;
         img._originalH = img.height;
         img.__uid = `img_${Date.now()}`;
-        canvas.add(img);
-        // Applica clipPath dopo add
-        if (window._makeClipRect) { img.clipPath = window._makeClipRect(window._designerZone || zone); img.setCoords(); }
-        canvas.setActiveObject(img); canvas.renderAll();
+        if (window._makeClipRect) img.clipPath = window._makeClipRect(window._designerZone || zone);
+        img._noClip = true;
+        canvas.add(img); canvas.setActiveObject(img); canvas.renderAll();
         checkBounds();
       }, { crossOrigin: 'anonymous' });
 
@@ -2745,34 +2735,27 @@ function DesignerApp() {
               </div>
             </div>
 
+            {/* ── Maschere fuori-zona: 4 div che coprono tutto ciò che esce dalla zona stampa ── */}
+            {/* Stesso colore dello sfondo esterno al canvas — nascondono visivamente il fuori-zona */}
+            {/* Top */}
+            <div style={{ position:'absolute', top:0, left:0, width:400, height:zone.top,
+              background:'#ebeced', zIndex:5, pointerEvents:'none' }} />
+            {/* Bottom */}
+            <div style={{ position:'absolute', top:zone.top+zone.height, left:0, width:400, height:svgH-(zone.top+zone.height),
+              background:'#ebeced', zIndex:5, pointerEvents:'none' }} />
+            {/* Left */}
+            <div style={{ position:'absolute', top:zone.top, left:0, width:zone.left, height:zone.height,
+              background:'#ebeced', zIndex:5, pointerEvents:'none' }} />
+            {/* Right */}
+            <div style={{ position:'absolute', top:zone.top, left:zone.left+zone.width, width:400-(zone.left+zone.width), height:zone.height,
+              background:'#ebeced', zIndex:5, pointerEvents:'none' }} />
+
             {/* Preview mask — gestita tramite clip-path sul canvas stage (vedi sotto) */}
 
             {/* Fabric canvas */}
             <canvas id="main-canvas" style={{
               position:'absolute', top:0, left:0, zIndex:3, width:400, height:svgH, background:'transparent',
             }} />
-
-            {/* ── Overlay mask zona stampa ─────────────────────────────
-                4 rettangoli grigi che coprono tutto fuori dalla zona stampa.
-                zIndex:6 = sopra al canvas (3) e alla zona tratteggiata (4).
-                Pointer-events:none = non bloccano il drag del testo.
-                Stessa tecnica di Lumise per mostrare il taglio netto. */}
-            {[
-              // sopra
-              { top:0, left:0, width:400, height:zone.top },
-              // sotto
-              { top:zone.top+zone.height, left:0, width:400, height:svgH-(zone.top+zone.height) },
-              // sinistra
-              { top:zone.top, left:0, width:zone.left, height:zone.height },
-              // destra
-              { top:zone.top, left:zone.left+zone.width, width:400-(zone.left+zone.width), height:zone.height },
-            ].map((r,i) => (
-              <div key={i} style={{
-                position:'absolute', zIndex:6, pointerEvents:'none',
-                background:'#ebeced',
-                top:r.top, left:r.left, width:r.width, height:r.height,
-              }} />
-            ))}
 
             {/* Preview mask — gestita fuori dallo stage per evitare problemi di scaling */}
           </div>
