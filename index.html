@@ -2206,20 +2206,63 @@ function DesignerApp() {
       canvasEl.addEventListener('touchmove', onTouchMove, { passive: false });
       canvasEl.addEventListener('touchend', onTouchEnd, { passive: true });
 
-      // ── ClipPath per oggetto — taglia solo il contenuto, non i controlli ──
-      // Funzione globale per creare clipRect per ogni oggetto
+      // ── Clip stile Lumise — sovrascrive _render di ogni oggetto ────────
+      // Lumise usa clipTo:function(ctx){} (API Fabric 3/4) che viene chiamata
+      // ad ogni frame DENTRO il rendering dell'oggetto, prima di disegnarlo.
+      // In Fabric 5 clipTo non esiste piu, ma possiamo fare la stessa cosa
+      // sovrascrivendo _render: salviamo il ctx, applichiamo un clip rect
+      // relativo al centro dell'oggetto, disegniamo, ripristiniamo.
+      // I CONTROLLI (maniglie) vengono disegnati DOPO _render in un layer
+      // separato — quindi non vengono tagliati. Esattamente come Lumise.
+
       window._designerZone = zone;
-      window._makeClipRect = (z) => new fabric.Rect({
-        left: z.left, top: z.top,
-        width: z.width, height: z.height,
-        absolutePositioned: true,
-      });
-      // Applica clipPath a ogni nuovo oggetto aggiunto
+
+      // Funzione che applica il clip Lumise-style a un oggetto Fabric 5
+      window._applyLumiseClip = (obj, z) => {
+        if (!obj || obj._lumiseClip || obj._noClip) return;
+        obj._lumiseClip = true;
+
+        const origRender = obj._render.bind(obj);
+
+        obj._render = function(ctx) {
+          const cp = this.getCenterPoint();
+          const z = window._designerZone;
+          if (!z) { origRender(ctx); return; }
+
+          // Coordinate del clip rect relative al centro dell'oggetto
+          // (come fa Lumise con clipRect.left - centerPoint.x)
+          const scaleX = this.scaleX || 1;
+          const scaleY = this.scaleY || 1;
+          const angle  = (this.angle || 0) * Math.PI / 180;
+
+          const x = z.left   - cp.x;
+          const y = z.top    - cp.y;
+          const w = z.width;
+          const h = z.height;
+
+          ctx.save();
+          // Annulla la trasformazione dell'oggetto per tornare a coordinate canvas
+          ctx.rotate(-angle);
+          ctx.scale(1 / scaleX, 1 / scaleY);
+
+          ctx.beginPath();
+          ctx.rect(x, y, w, h);
+          ctx.clip();
+
+          // Ripristina la trasformazione e disegna l'oggetto
+          ctx.scale(scaleX, scaleY);
+          ctx.rotate(angle);
+
+          origRender(ctx);
+          ctx.restore();
+        };
+      };
+
+      // Applica clip a ogni oggetto aggiunto (esclude mockup con _noClip)
       canvas.on('object:added', (e) => {
         const obj = e.target;
-        if (!obj || obj._noClip || obj.clipPath) return;
-        const z = window._designerZone || zone;
-        if (window._makeClipRect) obj.clipPath = window._makeClipRect(z);
+        if (!obj || obj._noClip) return;
+        window._applyLumiseClip(obj, window._designerZone || zone);
       });
 
 
@@ -2335,8 +2378,7 @@ function DesignerApp() {
           }
         });
         // Applica clipPath prima di add
-        if (window._makeClipRect) curvedObj.clipPath = window._makeClipRect(window._designerZone || zone);
-        curvedObj._noClip = true;
+        // clip gestito da object:added listener
         // Posiziona con stima iniziale
         curvedObj.set({ left: cx - crvRadius - 10, top: cy - crvRadius * 0.4 });
         canvas.add(curvedObj);
@@ -2394,8 +2436,7 @@ function DesignerApp() {
         top:  cy - estH / 2,
       });
       // Applica clipPath prima di add
-      if (window._makeClipRect) obj.clipPath = window._makeClipRect(window._designerZone || zone);
-      obj._noClip = true;
+      // clip gestito da object:added listener
       canvas.add(obj);
       // Dopo render corregge con dimensioni reali
       setTimeout(() => {
@@ -2419,8 +2460,7 @@ function DesignerApp() {
         img._originalW = img.width;
         img._originalH = img.height;
         img.__uid = `img_${Date.now()}`;
-        if (window._makeClipRect) img.clipPath = window._makeClipRect(window._designerZone || zone);
-        img._noClip = true;
+        // clip gestito da object:added listener
         canvas.add(img); canvas.setActiveObject(img); canvas.renderAll();
         checkBounds();
       }, { crossOrigin: 'anonymous' });
@@ -2713,12 +2753,11 @@ function DesignerApp() {
               </div>
             </div>
 
-            {/* Canvas Fabric — clip-path CSS taglia il disegno senza toccare i controlli */}
+            {/* Canvas Fabric — clip gestito da _render Lumise-style su ogni oggetto */}
             <canvas id="main-canvas" style={{
               position:'absolute', top:0, left:0,
               zIndex:3, width:400, height:svgH,
               background:'transparent',
-              clipPath: 'inset(' + zone.top + 'px ' + (400 - zone.left - zone.width) + 'px ' + (svgH - zone.top - zone.height) + 'px ' + zone.left + 'px)',
             }} />
 
             {/* Preview mask — gestita fuori dallo stage per evitare problemi di scaling */}
