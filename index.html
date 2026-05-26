@@ -2151,10 +2151,13 @@ function DesignerApp() {
         const tl = { x: z.left*vt[0]+vt[4], y: z.top*vt[3]+vt[5] };
         const br = { x: (z.left+z.width)*vt[0]+vt[4], y: (z.top+z.height)*vt[3]+vt[5] };
         const cw=400, ch=canvas.getHeight();
-        // Clip-path sull'elemento canvas HTML — taglia contenuto fuori zona
-        const cel = canvas.getElement();
-        if (cel) cel.style.clipPath = `inset(${Math.max(0,tl.y)}px ${Math.max(0,cw-br.x)}px ${Math.max(0,ch-br.y)}px ${Math.max(0,tl.x)}px)`;
-        // Aggiorna zona tratteggiata
+        // Clip-path sul wrapper Fabric (canvas-container) — taglia anche i controlli
+        const wrapper = canvas.getElement()?.parentElement;
+        if (wrapper) {
+          wrapper.style.clipPath = `inset(${Math.max(0,tl.y)}px ${Math.max(0,cw-br.x)}px ${Math.max(0,ch-br.y)}px ${Math.max(0,tl.x)}px)`;
+          wrapper.style.overflow = 'visible';
+        }
+        // Zona tratteggiata segue lo zoom
         const ol = document.getElementById('print-zone-outline');
         if (ol) { ol.style.left=tl.x+'px'; ol.style.top=tl.y+'px'; ol.style.width=(br.x-tl.x)+'px'; ol.style.height=(br.y-tl.y)+'px'; }
       });
@@ -2165,7 +2168,7 @@ function DesignerApp() {
         e.preventDefault();
         const c = window.DesignerCanvas; if (!c) return;
         const z = window._designerZone || zone;
-        const nz = Math.min(3, Math.max(1, c.getZoom() + (e.deltaY>0?-0.08:0.08)));
+        const nz = Math.min(3, Math.max(1, c.getZoom() + (e.deltaY>0?0.08:-0.08)));
         c.zoomToPoint(new fabric.Point(z.left+z.width/2, z.top+z.height/2), nz);
         setZoom(Math.round(nz*100)); showZoomBarTemp(); c.requestRenderAll();
       };
