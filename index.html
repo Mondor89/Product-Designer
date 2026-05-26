@@ -1971,11 +1971,9 @@ function DesignerApp() {
         wrapper.style.width = '400px';
         wrapper.style.height = svgH + 'px';
         wrapper.style.position = 'absolute';
-        // Offset negativo: canvas pieno spostato su/sinistra del wrapper clip
-        // così la zona stampa coincide col bordo del wrapper → overflow:hidden taglia corretto
-        wrapper.style.top  = (-zone.top)  + 'px';
-        wrapper.style.left = (-zone.left) + 'px';
-        wrapper.style.overflow = 'visible'; // taglio gestito dal wrapper clip esterno — il taglio è nel wrapper clip
+        wrapper.style.top  = '0';
+        wrapper.style.left = '0';
+        wrapper.style.overflow = 'visible'; — il taglio è nel wrapper clip
       }
 
       // ── Nascondi TUTTI i controlli default Fabric ─────────────
@@ -2715,23 +2713,13 @@ function DesignerApp() {
               </div>
             </div>
 
-            {/* Wrapper clip zona stampa — overflow:hidden taglia oggetti + maniglie Fabric */}
-            {/* Canvas posizionato negativamente per allinearlo alla zona stampa */}
-            <div style={{
-              position:'absolute',
-              top: zone.top, left: zone.left,
-              width: zone.width, height: zone.height,
-              overflow:'hidden',
-              zIndex:3,
-            }}>
-              {/* Canvas Fabric — top/left gestiti da JS init sul .canvas-container */}
-              <canvas id="main-canvas" style={{
-                position:'absolute',
-                top:0, left:0,
-                width:400, height:svgH,
-                background:'transparent',
-              }} />
-            </div>
+            {/* Canvas Fabric — clip-path CSS taglia il disegno senza toccare i controlli */}
+            <canvas id="main-canvas" style={{
+              position:'absolute', top:0, left:0,
+              zIndex:3, width:400, height:svgH,
+              background:'transparent',
+              clipPath: `inset(${zone.top}px ${400 - zone.left - zone.width}px ${svgH - zone.top - zone.height}px ${zone.left}px)`,
+            }} />
 
             {/* Preview mask — gestita fuori dallo stage per evitare problemi di scaling */}
           </div>
