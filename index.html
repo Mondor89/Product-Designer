@@ -1971,9 +1971,11 @@ function DesignerApp() {
         wrapper.style.width = '400px';
         wrapper.style.height = svgH + 'px';
         wrapper.style.position = 'absolute';
-        wrapper.style.top = '0';
-        wrapper.style.left = '0';
-        wrapper.style.overflow = 'visible'; // visibile — il taglio è nel wrapper clip
+        // Offset negativo: canvas pieno spostato su/sinistra del wrapper clip
+        // così la zona stampa coincide col bordo del wrapper → overflow:hidden taglia corretto
+        wrapper.style.top  = (-zone.top)  + 'px';
+        wrapper.style.left = (-zone.left) + 'px';
+        wrapper.style.overflow = 'visible'; // taglio gestito dal wrapper clip esterno — il taglio è nel wrapper clip
       }
 
       // ── Nascondi TUTTI i controlli default Fabric ─────────────
@@ -2722,9 +2724,10 @@ function DesignerApp() {
               overflow:'hidden',
               zIndex:3,
             }}>
+              {/* Canvas Fabric — top/left gestiti da JS init sul .canvas-container */}
               <canvas id="main-canvas" style={{
                 position:'absolute',
-                top: -zone.top, left: -zone.left,
+                top:0, left:0,
                 width:400, height:svgH,
                 background:'transparent',
               }} />
