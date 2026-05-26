@@ -1815,7 +1815,7 @@ function DesignerApp() {
     // Colora mockup via canvas 2D — no CORS perché URL Netlify è same-origin
     const _cp = PRODUCTS.find(p => p.id === product) || PRODUCTS[0];
     const _side = _cp?.sides?.[sideIndex] || 'Fronte';
-    const mockupUrl = `/mockups/${product}/${_side === 'Fronte' ? 'fronte' : 'retro'}.png`;
+    const mockupUrl = `/mockups/${_cp.id}/${_side === 'Fronte' ? 'fronte' : 'retro'}.png`;
     const loadToken = Date.now();
     canvas._mockupToken = loadToken;
 
