@@ -1947,22 +1947,15 @@ function DesignerApp() {
       const el = document.getElementById('main-canvas');
       if (!el || window.DesignerCanvas) return;
       const svgH = product === 'hoodie' ? 533 : product === 'longsleeve' ? 500 : 475;
-      // Canvas fisico 2x — 800px larghezza, scalato al 50% via CSS
-      // Quando l'utente zooma al 200% CSS, il canvas ha gia risoluzione sufficiente
-      // Il testo rimane nitido a qualsiasi zoom perche i vettori hanno abbastanza pixel
-      const PIXEL_RATIO = 2;
+      // Canvas ad alta risoluzione — dimensioni logiche 400xsvgH, fisiche 800x2*svgH
+      // Fabric usa il pixel ratio del dispositivo per render nitido senza distorcere coordinate
+      const PIXEL_RATIO = window.devicePixelRatio || 2;
       const canvas = new fabric.Canvas('main-canvas', {
-        width: 400 * PIXEL_RATIO, height: svgH * PIXEL_RATIO,
+        width: 400, height: svgH,
         preserveObjectStacking: true,
         backgroundColor: 'rgba(0,0,0,0)',
+        enableRetinaScaling: true,
       });
-      // Scala il canvas element al 50% via CSS — visivamente 400xsvgH
-      canvas.getElement().style.width  = '400px';
-      canvas.getElement().style.height = svgH + 'px';
-      canvas.getElement().parentElement && (canvas.getElement().parentElement.style.width  = '400px');
-      canvas.getElement().parentElement && (canvas.getElement().parentElement.style.height = svgH + 'px');
-      // Tutti gli oggetti devono essere scalati 2x rispetto alle coordinate logiche
-      canvas.setZoom(PIXEL_RATIO);
       window._pixelRatio = PIXEL_RATIO;
       window.DesignerCanvas = canvas;
 
@@ -1976,9 +1969,7 @@ function DesignerApp() {
         wrapper.style.top = '0';
         wrapper.style.left = '0';
         wrapper.style.overflow = 'hidden';
-        // canvas element interno: forziamo a 400px visivi (canvas fisico e 800px)
-        el.style.width  = '400px';
-        el.style.height = svgH + 'px';
+
       }
 
       // ── Nascondi TUTTI i controlli default Fabric ─────────────
