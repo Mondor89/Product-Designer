@@ -2718,9 +2718,10 @@ function DesignerApp() {
 
             {/* Preview mask — gestita tramite clip-path sul canvas stage (vedi sotto) */}
 
-            {/* Fabric canvas */}
+            {/* Fabric canvas — clip-path CSS taglia visivamente tutto fuori dalla zona stampa */}
             <canvas id="main-canvas" style={{
               position:'absolute', top:0, left:0, zIndex:3, width:400, height:svgH, background:'transparent',
+              clipPath: `inset(${zone.top}px ${400-(zone.left+zone.width)}px ${svgH-(zone.top+zone.height)}px ${zone.left}px)`,
             }} />
 
             {/* Preview mask — gestita fuori dallo stage per evitare problemi di scaling */}
