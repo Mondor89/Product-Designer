@@ -2171,6 +2171,30 @@ function DesignerApp() {
       canvas.on('object:added', () => { DesignerHistory.save(canvas); checkBounds(); });
       canvas.on('object:removed', () => checkBounds());
 
+      // ── Aggiorna clip-path CSS e zona tratteggiata dopo ogni render Fabric ──
+      // Quando Fabric zooma via zoomToPoint, le coordinate canvas cambiano.
+      // Convertiamo la zona stampa in coordinate schermo e aggiorniamo clip + outline via DOM.
+      canvas.on('after:render', () => {
+        const z = window._designerZone || zone;
+        if (!z) return;
+        // Converti angoli zona da coordinate Fabric a coordinate canvas CSS (px)
+        const tl = fabric.util.transformPoint({ x: z.left, y: z.top }, canvas.viewportTransform);
+        const br = fabric.util.transformPoint({ x: z.left + z.width, y: z.top + z.height }, canvas.viewportTransform);
+        const cw = canvas.getWidth();
+        const ch = canvas.getHeight();
+        // Aggiorna clip-path CSS sul canvas element
+        const canvasEl = canvas.getElement();
+        canvasEl.style.clipPath = `inset(${tl.y}px ${cw - br.x}px ${ch - br.y}px ${tl.x}px)`;
+        // Aggiorna posizione e dimensione zona tratteggiata
+        const outline = document.getElementById('print-zone-outline');
+        if (outline) {
+          outline.style.left   = tl.x + 'px';
+          outline.style.top    = tl.y + 'px';
+          outline.style.width  = (br.x - tl.x) + 'px';
+          outline.style.height = (br.y - tl.y) + 'px';
+        }
+      });
+
       // ── Rotella del mouse → zoom (desktop) ─────────────────────
       const canvasEl = canvas.getElement().parentElement;
       const onWheel = (e) => {
@@ -2719,12 +2743,13 @@ function DesignerApp() {
               src="" alt="" />
 
             {/* Zona stampa tratteggiata */}
-            <div id="print-zone-outline" style={{ position:'absolute', top:zone.top, left:zone.left,
-              width:zone.width, height:zone.height,
+            <div id="print-zone-outline" style={{
+              position:'absolute',
+              top:zone.top, left:zone.left, width:zone.width, height:zone.height,
               border:'1.5px dashed rgba(63,199,186,0.55)',
               borderRadius:4, zIndex:6, pointerEvents:'none',
               background:'rgba(63,199,186,0.03)',
-              transition:'opacity 0.2s' }}>
+            }}>
               <div style={{ position:'absolute', bottom:-16, left:0, fontSize:9, whiteSpace:'nowrap',
                 color:'rgba(63,199,186,0.7)', fontWeight:600 }}>
                 Zona stampa {currentProduct?.printZoneCm ? `${currentProduct.printZoneCm.w}×${currentProduct.printZoneCm.h}cm` : `${zone.width}×${zone.height}px`}
@@ -2735,7 +2760,6 @@ function DesignerApp() {
             {/* Il canvas zooma internamente via Fabric zoomToPoint — testo nitido */}
             <canvas id="main-canvas" style={{
               position:'absolute', top:0, left:0, zIndex:3, width:400, height:svgH, background:'transparent',
-              clipPath: `inset(${zone.top}px ${400-(zone.left+zone.width)}px ${svgH-(zone.top+zone.height)}px ${zone.left}px)`,
             }} />
 
             {/* Preview mask — gestita fuori dallo stage per evitare problemi di scaling */}
