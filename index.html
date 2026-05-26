@@ -2718,7 +2718,7 @@ function DesignerApp() {
               position:'absolute', top:0, left:0,
               zIndex:3, width:400, height:svgH,
               background:'transparent',
-              clipPath: `inset(${zone.top}px ${400 - zone.left - zone.width}px ${svgH - zone.top - zone.height}px ${zone.left}px)`,
+              clipPath: 'inset(' + zone.top + 'px ' + (400 - zone.left - zone.width) + 'px ' + (svgH - zone.top - zone.height) + 'px ' + zone.left + 'px)',
             }} />
 
             {/* Preview mask — gestita fuori dallo stage per evitare problemi di scaling */}
