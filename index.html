@@ -2219,19 +2219,21 @@ function DesignerApp() {
       canvasEl.addEventListener('touchmove', onTouchMove, { passive: false });
       canvasEl.addEventListener('touchend', onTouchEnd, { passive: true });
 
-      // ── ClipPath GLOBALE sul canvas — taglia tutto alla zona stampa ──────
-      // fabric.Rect con absolutePositioned:true applicato a canvas.clipPath
-      // Questo taglia tutto quello che Fabric disegna (oggetti + maniglie)
-      // ai bordi della zona stampa. E la soluzione piu semplice e affidabile.
+      // ── ClipPath per oggetto — taglia solo il contenuto, non i controlli ──
+      // Funzione globale per creare clipRect per ogni oggetto
       window._designerZone = zone;
-      const globalClip = new fabric.Rect({
-        left: zone.left,
-        top: zone.top,
-        width: zone.width,
-        height: zone.height,
+      window._makeClipRect = (z) => new fabric.Rect({
+        left: z.left, top: z.top,
+        width: z.width, height: z.height,
         absolutePositioned: true,
       });
-      canvas.clipPath = globalClip;
+      // Applica clipPath a ogni nuovo oggetto aggiunto
+      canvas.on('object:added', (e) => {
+        const obj = e.target;
+        if (!obj || obj._noClip || obj.clipPath) return;
+        const z = window._designerZone || zone;
+        if (window._makeClipRect) obj.clipPath = window._makeClipRect(z);
+      });
 
 
       setTimeout(() => {
@@ -2346,7 +2348,8 @@ function DesignerApp() {
           }
         });
         // Applica clipPath prima di add
-        // clip globale sul canvas — non serve per oggetto
+        if (window._makeClipRect) curvedObj.clipPath = window._makeClipRect(window._designerZone || zone);
+        curvedObj._noClip = true;
         // Posiziona con stima iniziale
         curvedObj.set({ left: cx - crvRadius - 10, top: cy - crvRadius * 0.4 });
         canvas.add(curvedObj);
@@ -2404,7 +2407,8 @@ function DesignerApp() {
         top:  cy - estH / 2,
       });
       // Applica clipPath prima di add
-      // clip globale sul canvas — non serve per oggetto
+      if (window._makeClipRect) obj.clipPath = window._makeClipRect(window._designerZone || zone);
+      obj._noClip = true;
       canvas.add(obj);
       // Dopo render corregge con dimensioni reali
       setTimeout(() => {
@@ -2428,7 +2432,8 @@ function DesignerApp() {
         img._originalW = img.width;
         img._originalH = img.height;
         img.__uid = `img_${Date.now()}`;
-        // clip globale sul canvas — non serve per oggetto
+        if (window._makeClipRect) img.clipPath = window._makeClipRect(window._designerZone || zone);
+        img._noClip = true;
         canvas.add(img); canvas.setActiveObject(img); canvas.renderAll();
         checkBounds();
       }, { crossOrigin: 'anonymous' });
