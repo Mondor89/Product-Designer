@@ -1797,54 +1797,38 @@ function DesignerApp() {
   // Tecnica: leggo pixel PNG, sostituisco bianchi/grigi con colore scelto
   // mantenendo luminosità → ombre e pieghe restano visibili
   // Funziona perché: pixel trasparenti (sfondo) → saltati → sfondo grigio visibile
-  //                  pixel opachi (t-shirt bianca) → colorati col colore scelto
+  //  pixel opachi (t-shirt bianca) → colorati col colore scelto → img HTML (non Fabric)
   useEffect(() => {
     const timer = setTimeout(() => {
-    // Pixel coloring via canvas 2D offscreen → risultato in tag <img> HTML (non Fabric)
-    // Così il mockup NON zooma con il canvas Fabric — rimane fisso come layer HTML
     const _cp = PRODUCTS.find(p => p.id === product) || PRODUCTS[0];
     const _side = _cp?.sides?.[sideIndex] || 'Fronte';
     const mockupUrl = `/mockups/${product}/${_side === 'Fronte' ? 'fronte' : 'retro'}.png`;
     const loadToken = Date.now();
     window._mockupToken = loadToken;
-
-    const hexToRgb = (hex) => [
-      parseInt(hex.slice(1,3),16),
-      parseInt(hex.slice(3,5),16),
-      parseInt(hex.slice(5,7),16),
-    ];
-
+    const hexToRgb = (hex) => [parseInt(hex.slice(1,3),16),parseInt(hex.slice(3,5),16),parseInt(hex.slice(5,7),16)];
     const img = new Image();
     img.onload = () => {
       if (window._mockupToken !== loadToken) return;
       const offscreen = document.createElement('canvas');
-      offscreen.width = img.width;
-      offscreen.height = img.height;
+      offscreen.width = img.width; offscreen.height = img.height;
       const ctx = offscreen.getContext('2d');
       ctx.drawImage(img, 0, 0);
       const imageData = ctx.getImageData(0, 0, offscreen.width, offscreen.height);
       const data = imageData.data;
-      const col = productColor || '#ffffff';
-      const [tr, tg, tb] = hexToRgb(col);
+      const [tr,tg,tb] = hexToRgb(productColor || '#ffffff');
       for (let i = 0; i < data.length; i += 4) {
         if (data[i+3] < 10) continue;
-        const lum = (data[i] + data[i+1] + data[i+2]) / 3 / 255;
-        data[i]   = Math.round(tr * lum);
-        data[i+1] = Math.round(tg * lum);
-        data[i+2] = Math.round(tb * lum);
+        const lum = (data[i]+data[i+1]+data[i+2]) / 3 / 255;
+        data[i]=Math.round(tr*lum); data[i+1]=Math.round(tg*lum); data[i+2]=Math.round(tb*lum);
       }
       ctx.putImageData(imageData, 0, 0);
-      // Aggiorna il tag <img> HTML del mockup — non tocca il canvas Fabric
       const mockupEl = document.getElementById('mockup-html-layer');
-      if (mockupEl && window._mockupToken === loadToken) {
-        mockupEl.src = offscreen.toDataURL();
-      }
-      // Rimuovi eventuali fabric.Image overlay rimasti da versioni precedenti
+      if (mockupEl && window._mockupToken === loadToken) mockupEl.src = offscreen.toDataURL();
+      // Rimuovi eventuali overlay Fabric rimasti
       const canvas = window.DesignerCanvas;
       if (canvas) {
         canvas.getObjects().filter(o => o._isMockupOverlay || o._isProductColor).forEach(o => canvas.remove(o));
         canvas.setBackgroundColor('rgba(0,0,0,0)', () => {});
-        canvas.backgroundColor = 'rgba(0,0,0,0)';
         canvas.renderAll();
       }
     };
@@ -1859,20 +1843,6 @@ function DesignerApp() {
   const [canvasReady, setCanvasReady] = useState(false);
   // zoom è moltiplicatore relativo al baseScale: 100 = fit schermo, 200 = doppio
   const [zoom, setZoom] = useState(100);
-  // applyZoom: aggiorna sia lo stato UI che il canvas Fabric con zoomToPoint
-  const applyZoom = React.useCallback((newPct) => {
-    const pct = Math.min(300, Math.max(100, newPct));
-    setZoom(pct);
-    const canvas = window.DesignerCanvas;
-    if (!canvas) return;
-    const z = window._designerZone;
-    if (!z) return;
-    canvas.zoomToPoint(
-      new fabric.Point(z.left + z.width / 2, z.top + z.height / 2),
-      pct / 100
-    );
-    canvas.requestRenderAll();
-  }, []);
   // clampZoom: mai sotto 100 (non si rimpicciolisce oltre il fit)
   const clampZoom = (z) => Math.min(200, Math.max(100, Math.round(z)));
   // Stato UI zoom mobile: barra visibile o no
@@ -2171,23 +2141,21 @@ function DesignerApp() {
       canvas.on('object:added', () => { DesignerHistory.save(canvas); checkBounds(); });
       canvas.on('object:removed', () => checkBounds());
 
-      // ── Aggiorna clip-path CSS e zona tratteggiata dopo ogni render Fabric ──
-      // Quando Fabric zooma via zoomToPoint, le coordinate canvas cambiano.
-      // Convertiamo la zona stampa in coordinate schermo e aggiorniamo clip + outline via DOM.
+      // ── Aggiorna clip-path e zona tratteggiata ad ogni render Fabric ──
       canvas.on('after:render', () => {
         const z = window._designerZone || zone;
-        if (!z) return;
-        const tl = fabric.util.transformPoint({ x: z.left, y: z.top }, canvas.viewportTransform);
-        const br = fabric.util.transformPoint({ x: z.left + z.width, y: z.top + z.height }, canvas.viewportTransform);
-        const cw = canvas.getWidth();
-        const ch = canvas.getHeight();
-        // Applica clip-path sul wrapper div di Fabric (contiene canvas + controlli)
-        const wrapper = canvas.getElement().parentElement;
-        if (wrapper) {
-          wrapper.style.clipPath = `inset(${tl.y}px ${cw - br.x}px ${ch - br.y}px ${tl.x}px)`;
-          wrapper.style.overflow = 'visible'; // necessario per clip-path
+        if (!z || !canvas.viewportTransform) return;
+        const vt = canvas.viewportTransform;
+        // Converti zona da coordinate Fabric a coordinate CSS pixel
+        const tl = { x: z.left * vt[0] + vt[4], y: z.top * vt[3] + vt[5] };
+        const br = { x: (z.left + z.width) * vt[0] + vt[4], y: (z.top + z.height) * vt[3] + vt[5] };
+        // Aggiorna clip-path sullo stage div — taglia tutto fuori zona
+        const stage = document.querySelector('.canvas-stage');
+        if (stage) {
+          const cw = 400, ch = parseFloat(stage.style.height) || canvas.getHeight();
+          stage.style.clipPath = `inset(${Math.max(0,tl.y)}px ${Math.max(0,cw-br.x)}px ${Math.max(0,ch-br.y)}px ${Math.max(0,tl.x)}px)`;
         }
-        // Aggiorna posizione zona tratteggiata
+        // Aggiorna zona tratteggiata
         const outline = document.getElementById('print-zone-outline');
         if (outline) {
           outline.style.left   = tl.x + 'px';
@@ -2203,28 +2171,19 @@ function DesignerApp() {
         e.preventDefault();
         const canvas = window.DesignerCanvas;
         if (!canvas) return;
-        // Zoom Fabric nativo — come Lumise: ridisegna vettori, nessuna sfocatura
         const delta = e.deltaY > 0 ? -0.08 : 0.08;
-        let newZoom = canvas.getZoom() + delta;
-        newZoom = Math.min(3.0, Math.max(1.0, newZoom));
-        // Zoom centrato sulla zona stampa — come Lumise
+        const newZoom = Math.min(3.0, Math.max(1.0, canvas.getZoom() + delta));
         const z = window._designerZone || zone;
-        canvas.zoomToPoint(
-          new fabric.Point(z.left + z.width / 2, z.top + z.height / 2),
-          newZoom
-        );
-        // Aggiorna stato zoom per slider UI (converti a percentuale)
+        canvas.zoomToPoint(new fabric.Point(z.left + z.width/2, z.top + z.height/2), newZoom);
         setZoom(Math.round(newZoom * 100));
         showZoomBarTemp();
         canvas.requestRenderAll();
       };
       canvasEl.addEventListener('wheel', onWheel, { passive: false });
 
-      // ── Pinch-to-zoom touch (mobile + tablet) ───────────────────
+      // Pinch-to-zoom touch
       let lastDist = null;
-      const onTouchStart = (e) => {
-        if (e.touches.length === 2) lastDist = null;
-      };
+      const onTouchStart = (e) => { if (e.touches.length === 2) lastDist = null; };
       const onTouchMove = (e) => {
         if (e.touches.length !== 2) return;
         e.preventDefault();
@@ -2234,14 +2193,9 @@ function DesignerApp() {
         if (lastDist !== null) {
           const canvas = window.DesignerCanvas;
           if (!canvas) return;
-          const delta = (dist - lastDist) * 0.004; // sensibilità pinch
-          let newZoom = canvas.getZoom() + delta;
-          newZoom = Math.min(3.0, Math.max(1.0, newZoom));
+          const newZoom = Math.min(3.0, Math.max(1.0, canvas.getZoom() + (dist - lastDist) * 0.004));
           const z = window._designerZone || zone;
-          canvas.zoomToPoint(
-            new fabric.Point(z.left + z.width / 2, z.top + z.height / 2),
-            newZoom
-          );
+          canvas.zoomToPoint(new fabric.Point(z.left + z.width/2, z.top + z.height/2), newZoom);
           setZoom(Math.round(newZoom * 100));
           showZoomBarTemp();
           canvas.requestRenderAll();
@@ -2301,7 +2255,8 @@ function DesignerApp() {
     if (c) {
       const json = c.toJSON(['id']);
       setSideData((d) => ({ ...d, [currentSideKey]: json }));
-      const newZone = zone;
+      // Aggiorna zona globale per nuovi oggetti
+      const newZone = zone; // zona calcolata da printZoneCm in tempo reale
       window._designerZone = newZone;
       const nextKey = `${newProduct}_${newSide}`;
       const nextData = sideData[nextKey];
@@ -2310,15 +2265,16 @@ function DesignerApp() {
       } else {
         c.clear();c.renderAll();
       }
-      // Reset zoom Fabric a 1 quando si cambia prodotto/lato
-      c.setZoom(1);
-      c.viewportTransform = [1,0,0,1,0,0];
-      c.requestRenderAll();
     }
-    setZoom(100);
     setProduct(newProduct);
     setSideIndex(newSide);
     setMockupKey(k => k + 1);
+    // Reset zoom Fabric
+    setZoom(100);
+    setTimeout(() => {
+      const c = window.DesignerCanvas;
+      if (c) { c.setZoom(1); c.viewportTransform = [1,0,0,1,0,0]; c.requestRenderAll(); }
+    }, 100);
   };
 
   useEffect(() => {
@@ -2567,8 +2523,23 @@ function DesignerApp() {
   const [mobileActiveTab, setMobileActiveTab] = useState(null);
   // stageRef rimosso — preview gestita via Fabric.js
 
-  // canvasScale = solo fit schermo — lo zoom utente è gestito da Fabric zoomToPoint
+  // canvasScale = solo baseScale — zoom utente gestito da Fabric zoomToPoint
   const canvasScale = baseScale;
+
+  // applyZoom: sincronizza UI e canvas Fabric
+  const applyZoom = React.useCallback((newPct) => {
+    const pct = Math.min(300, Math.max(100, newPct));
+    setZoom(pct);
+    const canvas = window.DesignerCanvas;
+    if (!canvas) return;
+    const z = window._designerZone;
+    if (!z) return;
+    canvas.zoomToPoint(
+      new fabric.Point(z.left + z.width / 2, z.top + z.height / 2),
+      pct / 100
+    );
+    canvas.requestRenderAll();
+  }, []);
 
 
 
@@ -2729,37 +2700,32 @@ function DesignerApp() {
               borderRadius:4,
             }}>
 
-            {/* Sfondo grigio Lumise — visibile fuori dalla sagoma del PNG trasparente */}
+            {/* Sfondo grigio Lumise */}
             <div style={{
               position:'absolute', top:0, left:0, width:400, height:svgH,
-              background:'#ebeced',
-              boxShadow:'0 2px 16px rgba(0,0,0,0.10)',
-              borderRadius:4,
-              zIndex:1, pointerEvents:'none',
+              background:'#ebeced', boxShadow:'0 2px 16px rgba(0,0,0,0.10)',
+              borderRadius:4, zIndex:1, pointerEvents:'none',
             }} />
 
-            {/* Mockup HTML layer — NON è nel canvas Fabric, non zooma con esso */}
-            <img id="mockup-html-layer"
+            {/* Mockup HTML — fuori dal canvas Fabric, non zooma */}
+            <img id="mockup-html-layer" src="" alt=""
               style={{ position:'absolute', top:0, left:0, width:400, height:svgH,
-                zIndex:2, pointerEvents:'none', objectFit:'cover' }}
-              src="" alt="" />
+                zIndex:2, pointerEvents:'none', objectFit:'cover' }} />
 
             {/* Zona stampa tratteggiata */}
-            <div id="print-zone-outline" style={{
-              position:'absolute',
-              top:zone.top, left:zone.left, width:zone.width, height:zone.height,
+            <div id="print-zone-outline" style={{ position:'absolute', top:zone.top, left:zone.left,
+              width:zone.width, height:zone.height,
               border:'1.5px dashed rgba(63,199,186,0.55)',
               borderRadius:4, zIndex:6, pointerEvents:'none',
               background:'rgba(63,199,186,0.03)',
-            }}>
+              transition:'opacity 0.2s' }}>
               <div style={{ position:'absolute', bottom:-16, left:0, fontSize:9, whiteSpace:'nowrap',
                 color:'rgba(63,199,186,0.7)', fontWeight:600 }}>
                 Zona stampa {currentProduct?.printZoneCm ? `${currentProduct.printZoneCm.w}×${currentProduct.printZoneCm.h}cm` : `${zone.width}×${zone.height}px`}
               </div>
             </div>
 
-            {/* Fabric canvas — clip-path CSS taglia visivamente tutto fuori dalla zona stampa */}
-            {/* Il canvas zooma internamente via Fabric zoomToPoint — testo nitido */}
+            {/* Fabric canvas — clip-path taglia fuori zona, aggiornato via after:render */}
             <canvas id="main-canvas" style={{
               position:'absolute', top:0, left:0, zIndex:3, width:400, height:svgH, background:'transparent',
             }} />
