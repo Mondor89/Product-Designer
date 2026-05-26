@@ -2177,15 +2177,17 @@ function DesignerApp() {
       canvas.on('after:render', () => {
         const z = window._designerZone || zone;
         if (!z) return;
-        // Converti angoli zona da coordinate Fabric a coordinate canvas CSS (px)
         const tl = fabric.util.transformPoint({ x: z.left, y: z.top }, canvas.viewportTransform);
         const br = fabric.util.transformPoint({ x: z.left + z.width, y: z.top + z.height }, canvas.viewportTransform);
         const cw = canvas.getWidth();
         const ch = canvas.getHeight();
-        // Aggiorna clip-path CSS sul canvas element
-        const canvasEl = canvas.getElement();
-        canvasEl.style.clipPath = `inset(${tl.y}px ${cw - br.x}px ${ch - br.y}px ${tl.x}px)`;
-        // Aggiorna posizione e dimensione zona tratteggiata
+        // Applica clip-path sul wrapper div di Fabric (contiene canvas + controlli)
+        const wrapper = canvas.getElement().parentElement;
+        if (wrapper) {
+          wrapper.style.clipPath = `inset(${tl.y}px ${cw - br.x}px ${ch - br.y}px ${tl.x}px)`;
+          wrapper.style.overflow = 'visible'; // necessario per clip-path
+        }
+        // Aggiorna posizione zona tratteggiata
         const outline = document.getElementById('print-zone-outline');
         if (outline) {
           outline.style.left   = tl.x + 'px';
