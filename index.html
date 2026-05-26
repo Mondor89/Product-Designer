@@ -1806,18 +1806,20 @@ function DesignerApp() {
     const cw = canvas.getWidth();
     const ch = canvas.getHeight();
 
-    // Pulisci canvas da eventuali overlay precedenti
+    // Mockup come <img> HTML — non entra in Fabric, non viene spostato da zoomToPoint
+    // Il canvas Fabric e trasparente sopra — zoomToPoint zooma solo gli oggetti
     canvas.getObjects().filter(o => o._isProductColor || o._isMockupOverlay).forEach(o => canvas.remove(o));
-    canvas.setOverlayImage(null, () => {});
-    canvas.setBackgroundColor('rgba(0,0,0,0)', () => {});
     canvas.backgroundColor = 'rgba(0,0,0,0)';
+    canvas.renderAll();
 
-    // Colora mockup via canvas 2D — no CORS perché URL Netlify è same-origin
+    const mockupEl = document.getElementById('ws-mockup-img');
+    if (!mockupEl) return;
+
     const _cp = PRODUCTS.find(p => p.id === product) || PRODUCTS[0];
     const _side = _cp?.sides?.[sideIndex] || 'Fronte';
-    const mockupUrl = `/mockups/${_cp.id}/${_side === 'Fronte' ? 'fronte' : 'retro'}.png`;
+    const mockupUrl = '/mockups/' + _cp.id + '/' + (_side === 'Fronte' ? 'fronte' : 'retro') + '.png';
     const loadToken = Date.now();
-    canvas._mockupToken = loadToken;
+    mockupEl._loadToken = loadToken;
 
     const hexToRgb = (hex) => [
       parseInt(hex.slice(1,3),16),
@@ -1827,51 +1829,25 @@ function DesignerApp() {
 
     const img = new Image();
     img.onload = () => {
-      if (canvas._mockupToken !== loadToken) return;
-
-      // Canvas 2D offscreen per manipolazione pixel
+      if (mockupEl._loadToken !== loadToken) return;
       const offscreen = document.createElement('canvas');
       offscreen.width = img.width;
       offscreen.height = img.height;
       const ctx = offscreen.getContext('2d');
       ctx.drawImage(img, 0, 0);
-
       const imageData = ctx.getImageData(0, 0, offscreen.width, offscreen.height);
       const data = imageData.data;
       const col = productColor || '#ffffff';
       const [tr, tg, tb] = hexToRgb(col);
-
       for (let i = 0; i < data.length; i += 4) {
-        if (data[i+3] < 10) continue; // pixel trasparente → salta
-        // Luminosità pixel originale (0=nero, 1=bianco) — mantiene ombre e pieghe
+        if (data[i+3] < 10) continue;
         const lum = (data[i] + data[i+1] + data[i+2]) / 3 / 255;
         data[i]   = Math.round(tr * lum);
         data[i+1] = Math.round(tg * lum);
         data[i+2] = Math.round(tb * lum);
       }
       ctx.putImageData(imageData, 0, 0);
-
-      // Carica il canvas 2D colorato come fabric.Image — qualità PNG massima
-      fabric.Image.fromURL(offscreen.toDataURL(), (fImg) => {
-        if (canvas._mockupToken !== loadToken) return;
-        // Pulizia DENTRO il callback — rimuove eventuali overlay arrivati in ritardo
-        canvas.getObjects().filter(o => o._isMockupOverlay).forEach(o => canvas.remove(o));
-        fImg.scaleToWidth(cw);
-        if (fImg.getScaledHeight() < ch) fImg.scaleToHeight(ch);
-        fImg.set({
-          left: 0, top: 0,
-          originX: 'left', originY: 'top',
-          selectable: false, evented: false,
-          hasControls: false, hasBorders: false,
-          lockMovementX: true, lockMovementY: true,
-          hoverCursor: 'default',
-          _isMockupOverlay: true,
-          _noClip: true,
-        });
-        canvas.add(fImg);
-        canvas.bringToFront(fImg);
-        canvas.renderAll();
-      });
+      mockupEl.src = offscreen.toDataURL();
     };
     img.src = mockupUrl;
     }, 50); // delay 50ms
@@ -2709,10 +2685,22 @@ function DesignerApp() {
               zIndex:1, pointerEvents:'none',
             }} />
 
-            {/* Mockup colorato via pixel coloring — canvas 2D offscreen + fabric.Image */}
+            {/* Mockup HTML — sta fuori da Fabric, non viene spostato da zoomToPoint */}
+            <img id="ws-mockup-img" alt=""
+              style={{
+                position:'absolute', top:0, left:0,
+                width:400, height:svgH,
+                objectFit:'fill',
+                zIndex:2, pointerEvents:'none',
+              }}
+            />
 
-            {/* Zona stampa tratteggiata */}
-            {/* Zona tratteggiata — id per toggle DOM diretto senza re-render */}
+            {/* Canvas Fabric — trasparente, zoomToPoint zooma solo gli oggetti */}
+            <canvas id="main-canvas" style={{
+              position:'absolute', top:0, left:0, zIndex:3, width:400, height:svgH, background:'transparent',
+            }} />
+
+            {/* Zona stampa tratteggiata — sopra il canvas */}
             <div id="print-zone-outline" style={{ position:'absolute', top:zone.top, left:zone.left,
               width:zone.width, height:zone.height,
               border:'1.5px dashed rgba(63,199,186,0.55)',
@@ -2721,16 +2709,9 @@ function DesignerApp() {
               transition:'opacity 0.2s' }}>
               <div style={{ position:'absolute', bottom:-16, left:0, fontSize:9, whiteSpace:'nowrap',
                 color:'rgba(63,199,186,0.7)', fontWeight:600 }}>
-                Zona stampa {currentProduct?.printZoneCm ? `${currentProduct.printZoneCm.w}×${currentProduct.printZoneCm.h}cm` : `${zone.width}×${zone.height}px`}
+                Zona stampa {currentProduct?.printZoneCm ? `${currentProduct.printZoneCm.w}x${currentProduct.printZoneCm.h}cm` : `${zone.width}x${zone.height}px`}
               </div>
             </div>
-
-            {/* Preview mask — gestita tramite clip-path sul canvas stage (vedi sotto) */}
-
-            {/* Fabric canvas */}
-            <canvas id="main-canvas" style={{
-              position:'absolute', top:0, left:0, zIndex:3, width:400, height:svgH, background:'transparent',
-            }} />
 
             {/* Preview mask — gestita fuori dallo stage per evitare problemi di scaling */}
           </div>
