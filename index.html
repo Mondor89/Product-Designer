@@ -2162,33 +2162,16 @@ function DesignerApp() {
       canvas.on('object:added', () => { DesignerHistory.save(canvas); checkBounds(); });
       canvas.on('object:removed', () => checkBounds());
 
-      // ── Zoom via canvas.zoomToPoint() — testo sempre nitido (stile Lumise) ──
-      // Il CSS scale resta solo per baseScale (fit schermo).
-      // Lo zoom utente usa Fabric zoomToPoint centrato sul centro del canvas.
-      // Min zoom = 1 (100%), max zoom = 2 (200%).
+      // ── Rotella del mouse → zoom CSS (desktop) ────────────────────
       const canvasEl = canvas.getElement().parentElement;
-
-      // Centro del canvas (= centro zona stampa) in coordinate canvas
-      const zoomCenter = new fabric.Point(cw / 2, ch / 2);
-
-      const applyFabricZoom = (newZoomPct) => {
-        const fabricZoom = Math.min(2, Math.max(1, newZoomPct / 100));
-        canvas.zoomToPoint(zoomCenter, fabricZoom);
-      };
-
       const onWheel = (e) => {
         e.preventDefault();
         setZoom(z => {
           const delta = e.deltaY > 0 ? -8 : 8;
-          const next = Math.min(200, Math.max(100, z + delta));
-          applyFabricZoom(next);
-          return next;
+          return Math.min(200, Math.max(100, z + delta));
         });
       };
       canvasEl.addEventListener('wheel', onWheel, { passive: false });
-
-      // Esponi applyFabricZoom globalmente per slider e pinch
-      window._applyFabricZoom = applyFabricZoom;
 
       // ── Pinch-to-zoom touch (mobile + tablet) ───────────────────
       let lastDist = null;
@@ -2203,11 +2186,7 @@ function DesignerApp() {
         const dist = Math.sqrt(dx*dx + dy*dy);
         if (lastDist !== null) {
           const delta = (dist - lastDist) * 0.4;
-          setZoom(z => {
-            const next = Math.min(200, Math.max(100, z + delta));
-            applyFabricZoom(next);
-            return next;
-          });
+          setZoom(z => Math.min(200, Math.max(100, z + delta)));
           showZoomBarTemp();
         }
         lastDist = dist;
@@ -2516,9 +2495,9 @@ function DesignerApp() {
   const [mobileActiveTab, setMobileActiveTab] = useState(null);
   // stageRef rimosso — preview gestita via Fabric.js
 
-  // canvasScale = solo baseScale (fit schermo)
-  // Lo zoom utente e gestito da canvas.zoomToPoint() di Fabric — vettori nitidi
-  const canvasScale = baseScale;
+  // canvasScale = baseScale * zoom utente
+  // CSS scale su wrapper interno che contiene mockup + canvas insieme
+  const canvasScale = baseScale * (zoom / 100);
 
 
 
@@ -2567,14 +2546,14 @@ function DesignerApp() {
           <>
             <div style={{ width:1, height:28, background:'rgba(255,255,255,0.1)', margin:'0 2px', flexShrink:0 }} />
             <div style={{ display:'flex', alignItems:'center', gap:5, flexShrink:0 }}>
-              <button onClick={() => { const n = Math.max(100, zoom-10); setZoom(n); if(window._applyFabricZoom) window._applyFabricZoom(n); }}
+              <button onClick={() => setZoom(z => Math.max(100, z-10))}
                 style={{ background:'rgba(255,255,255,0.08)', border:'none', color:'#aaa',
                   borderRadius:4, width:20, height:20, cursor:'pointer', fontSize:14,
                   display:'flex', alignItems:'center', justifyContent:'center', lineHeight:1 }}>–</button>
               <input type="range" min={100} max={200} value={Math.round(zoom)}
-                onChange={e => { const n = +e.target.value; setZoom(n); if(window._applyFabricZoom) window._applyFabricZoom(n); }}
+                onChange={e => setZoom(+e.target.value)}
                 style={{ width:80, accentColor:'#3fc7ba', cursor:'pointer' }} />
-              <button onClick={() => { const n = Math.min(200, zoom+10); setZoom(n); if(window._applyFabricZoom) window._applyFabricZoom(n); }}
+              <button onClick={() => setZoom(z => Math.min(200, z+10))}
                 style={{ background:'rgba(255,255,255,0.08)', border:'none', color:'#aaa',
                   borderRadius:4, width:20, height:20, cursor:'pointer', fontSize:14,
                   display:'flex', alignItems:'center', justifyContent:'center', lineHeight:1, flexShrink:0 }}>+</button>
@@ -2665,17 +2644,17 @@ function DesignerApp() {
             </div>
           )}
 
-          {/* Stage — wrapper scalabile che contiene mockup + canvas zona stampa */}
-          {/* transform:scale centrato sulla zona stampa = zoom nitido stile Lumise */}
+          {/* Stage esterno — solo fit schermo (baseScale), no overflow hidden */}
           <div className="canvas-stage"
             style={{ position:'relative',
               width:400, height:svgH,
               display: product ? 'block' : 'none',
-              transform:'scale(' + canvasScale + ')',
-              transformOrigin:'center top', /* baseScale fit schermo */
-              transition:'transform 0.2s',
+              transform:'scale(' + baseScale + ')',
+              transformOrigin:'center top',
+              transition:'transform 0.15s',
               marginTop: isMobile ? 4 : 0,
               flexShrink: 0,
+              overflow:'visible',
             }}>
 
             {/* Sfondo grigio — dietro tutto */}
@@ -2687,7 +2666,7 @@ function DesignerApp() {
               zIndex:0, pointerEvents:'none',
             }} />
 
-            {/* Mockup colorato — img HTML, zIndex:1, copre tutto il prodotto */}
+            {/* Mockup colorato — img HTML sotto il canvas */}
             <img id="ws-mockup-img" alt=""
               style={{
                 position:'absolute', top:0, left:0,
@@ -2695,29 +2674,36 @@ function DesignerApp() {
                 objectFit:'fill',
                 zIndex:1, pointerEvents:'none',
                 display: product ? 'block' : 'none',
+                transformOrigin: ((zone.left + zone.width/2)/400*100).toFixed(1) + '% ' + ((zone.top + zone.height/2)/svgH*100).toFixed(1) + '%',
+                transform:'scale(' + (zoom/100) + ')',
+                transition:'transform 0.15s',
               }}
             />
 
-            {/* Canvas Fabric — SOLO dimensioni zona stampa, posizionato sopra il mockup */}
-            {/* overflow:visible permette alle maniglie di uscire fuori dalla zona */}
-            {/* Il canvas piccolo taglia automaticamente gli oggetti ai suoi bordi */}
+            {/* Canvas Fabric — dimensioni zona stampa, scala con zoom utente */}
+            {/* overflow:visible — maniglie possono uscire fuori dalla zona */}
             <canvas id="main-canvas" style={{
               position:'absolute',
               top:zone.top, left:zone.left,
               zIndex:2,
               width:zone.width, height:zone.height,
               background:'transparent',
-              overflow:'visible',
+              transformOrigin: '50% 50%',
+              transform:'scale(' + (zoom/100) + ')',
+              transition:'transform 0.15s',
             }} />
 
-            {/* Cornice tratteggiata zona stampa — sopra il canvas */}
+            {/* Cornice tratteggiata zona stampa */}
             <div id="print-zone-outline" style={{
               position:'absolute', top:zone.top, left:zone.left,
               width:zone.width, height:zone.height,
               border:'1.5px dashed rgba(63,199,186,0.55)',
               borderRadius:4, zIndex:3, pointerEvents:'none',
               background:'rgba(63,199,186,0.03)',
-              transition:'opacity 0.2s' }}>
+              transition:'opacity 0.2s',
+              transformOrigin:'50% 50%',
+              transform:'scale(' + (zoom/100) + ')',
+            }}>
               <div style={{ position:'absolute', bottom:-16, left:0, fontSize:9, whiteSpace:'nowrap',
                 color:'rgba(63,199,186,0.7)', fontWeight:600 }}>
                 Zona stampa {currentProduct?.printZoneCm ? `${currentProduct.printZoneCm.w}x${currentProduct.printZoneCm.h}cm` : `${zone.width}x${zone.height}px`}
@@ -2835,7 +2821,7 @@ function DesignerApp() {
                     type="range"
                     min={100} max={200}
                     value={Math.round(zoom)}
-                    onChange={e => { const n = +e.target.value; setZoom(n); if(window._applyFabricZoom) window._applyFabricZoom(n); }}
+                    onChange={e => setZoom(+e.target.value)}
                     style={{ flex: 1, accentColor: '#3fc7ba', cursor: 'pointer', height: 4 }}
                   />
                   {/* Bottone + */}
