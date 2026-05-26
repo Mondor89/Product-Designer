@@ -2678,7 +2678,7 @@ function DesignerApp() {
                 position:'absolute', top:0, left:0,
                 width:400, height:svgH,
                 objectFit:'fill',
-                zIndex:2, pointerEvents:'none',
+                zIndex:4, pointerEvents:'none',
                 display: product ? 'block' : 'none',
               }}
             />
@@ -2688,7 +2688,7 @@ function DesignerApp() {
             <div id="print-zone-outline" style={{ position:'absolute', top:zone.top, left:zone.left,
               width:zone.width, height:zone.height,
               border:'1.5px dashed rgba(63,199,186,0.55)',
-              borderRadius:4, zIndex:4, pointerEvents:'none',
+              borderRadius:4, zIndex:5, pointerEvents:'none',
               background:'rgba(63,199,186,0.03)',
               transition:'opacity 0.2s' }}>
               <div style={{ position:'absolute', bottom:-16, left:0, fontSize:9, whiteSpace:'nowrap',
@@ -2700,7 +2700,7 @@ function DesignerApp() {
             {/* Canvas Fabric — pieno, nessun clip interno */}
             <canvas id="main-canvas" style={{
               position:'absolute', top:0, left:0,
-              zIndex:3, width:400, height:svgH,
+              zIndex:2, width:400, height:svgH,
               background:'transparent',
             }} />
 
@@ -2709,19 +2709,19 @@ function DesignerApp() {
             {/* Striscia TOP — da 0 a zone.top */}
             <div style={{ position:'absolute', top:0, left:0,
               width:400, height:zone.top,
-              background:'#ebeced', zIndex:5, pointerEvents:'none' }} />
+              background:'#ebeced', zIndex:3, pointerEvents:'none' }} />
             {/* Striscia BOTTOM — da zone.top+zone.height a fondo */}
             <div style={{ position:'absolute', top:zone.top+zone.height, left:0,
               width:400, height:svgH - zone.top - zone.height,
-              background:'#ebeced', zIndex:5, pointerEvents:'none' }} />
+              background:'#ebeced', zIndex:3, pointerEvents:'none' }} />
             {/* Striscia LEFT — solo la fascia laterale sinistra (altezza zona) */}
             <div style={{ position:'absolute', top:zone.top, left:0,
               width:zone.left, height:zone.height,
-              background:'#ebeced', zIndex:5, pointerEvents:'none' }} />
+              background:'#ebeced', zIndex:3, pointerEvents:'none' }} />
             {/* Striscia RIGHT — solo la fascia laterale destra (altezza zona) */}
             <div style={{ position:'absolute', top:zone.top, left:zone.left+zone.width,
               width:400 - zone.left - zone.width, height:zone.height,
-              background:'#ebeced', zIndex:5, pointerEvents:'none' }} />
+              background:'#ebeced', zIndex:3, pointerEvents:'none' }} />
 
             {/* Preview mask — gestita fuori dallo stage per evitare problemi di scaling */}
           </div>
