@@ -2206,74 +2206,8 @@ function DesignerApp() {
       canvasEl.addEventListener('touchmove', onTouchMove, { passive: false });
       canvasEl.addEventListener('touchend', onTouchEnd, { passive: true });
 
-      // ── Clip stile Lumise — sovrascrive _render di ogni oggetto ────────
-      // Lumise usa clipTo:function(ctx){} (API Fabric 3/4) che viene chiamata
-      // ad ogni frame DENTRO il rendering dell'oggetto, prima di disegnarlo.
-      // In Fabric 5 clipTo non esiste piu, ma possiamo fare la stessa cosa
-      // sovrascrivendo _render: salviamo il ctx, applichiamo un clip rect
-      // relativo al centro dell'oggetto, disegniamo, ripristiniamo.
-      // I CONTROLLI (maniglie) vengono disegnati DOPO _render in un layer
-      // separato — quindi non vengono tagliati. Esattamente come Lumise.
-
+      // zona disponibile globalmente per i 4 div overlay
       window._designerZone = zone;
-
-      // Funzione che applica il clip Lumise-style a un oggetto Fabric 5
-      // Il ctx dentro _render ha origine nel CENTRO dell'oggetto e gia
-      // applicato scale+rotation dell'oggetto. Dobbiamo annullare quelle
-      // trasformazioni, disegnare il clip rect in coordinate canvas assolute
-      // relative al centro, poi ripristinare. Esattamente come Lumise clipto.
-      window._applyLumiseClip = (obj, z) => {
-        if (!obj || obj._lumiseClip || obj._noClip) return;
-        obj._lumiseClip = true;
-
-        const origRender = obj._render.bind(obj);
-
-        obj._render = function(ctx) {
-          const z = window._designerZone;
-          if (!z) { origRender(ctx); return; }
-
-          // getCenterPoint() = posizione centro oggetto in coordinate canvas assolute
-          const cp = this.getCenterPoint();
-          const scaleX = this.scaleX || 1;
-          const scaleY = this.scaleY || 1;
-          const angle  = (this.angle || 0) * Math.PI / 180;
-
-          // Coordinate clip rect relative al centro oggetto (sistema Lumise)
-          // x = z.left - cp.x = quanto il bordo sinistro della zona dista dal centro
-          const x = z.left  - cp.x;
-          const y = z.top   - cp.y;
-          const w = z.width;
-          const h = z.height;
-
-          ctx.save();
-
-          // Il ctx e gia ruotato e scalato da Fabric per questo oggetto.
-          // Annulliamo quelle trasformazioni per tornare a coordinate "canvas"
-          // (ma con origine ancora nel centro dell'oggetto)
-          ctx.rotate(-angle);
-          ctx.scale(1 / scaleX, 1 / scaleY);
-
-          // Ora (0,0) = centro oggetto, assi allineati al canvas
-          // Disegniamo il clip rect con le coordinate relative al centro
-          ctx.beginPath();
-          ctx.rect(x, y, w, h);
-          ctx.clip();
-
-          // Ripristiniamo le trasformazioni originali e disegniamo
-          ctx.scale(scaleX, scaleY);
-          ctx.rotate(angle);
-
-          origRender(ctx);
-          ctx.restore();
-        };
-      };
-
-      // Applica clip a ogni oggetto aggiunto (esclude mockup con _noClip)
-      canvas.on('object:added', (e) => {
-        const obj = e.target;
-        if (!obj || obj._noClip) return;
-        window._applyLumiseClip(obj, window._designerZone || zone);
-      });
 
 
       setTimeout(() => {
@@ -2763,12 +2697,31 @@ function DesignerApp() {
               </div>
             </div>
 
-            {/* Canvas Fabric — clip gestito da _render Lumise-style su ogni oggetto */}
+            {/* Canvas Fabric — pieno, nessun clip interno */}
             <canvas id="main-canvas" style={{
               position:'absolute', top:0, left:0,
               zIndex:3, width:400, height:svgH,
               background:'transparent',
             }} />
+
+            {/* 4 rettangoli grigi che coprono le aree FUORI dalla zona stampa */}
+            {/* zIndex:5 = sopra canvas e mockup, sotto i controlli Fabric (zIndex>100) */}
+            {/* Striscia TOP — da 0 a zone.top */}
+            <div style={{ position:'absolute', top:0, left:0,
+              width:400, height:zone.top,
+              background:'#ebeced', zIndex:5, pointerEvents:'none' }} />
+            {/* Striscia BOTTOM — da zone.top+zone.height a fondo */}
+            <div style={{ position:'absolute', top:zone.top+zone.height, left:0,
+              width:400, height:svgH - zone.top - zone.height,
+              background:'#ebeced', zIndex:5, pointerEvents:'none' }} />
+            {/* Striscia LEFT — solo la fascia laterale sinistra (altezza zona) */}
+            <div style={{ position:'absolute', top:zone.top, left:0,
+              width:zone.left, height:zone.height,
+              background:'#ebeced', zIndex:5, pointerEvents:'none' }} />
+            {/* Striscia RIGHT — solo la fascia laterale destra (altezza zona) */}
+            <div style={{ position:'absolute', top:zone.top, left:zone.left+zone.width,
+              width:400 - zone.left - zone.width, height:zone.height,
+              background:'#ebeced', zIndex:5, pointerEvents:'none' }} />
 
             {/* Preview mask — gestita fuori dallo stage per evitare problemi di scaling */}
           </div>
