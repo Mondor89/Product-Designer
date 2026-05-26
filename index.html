@@ -27,7 +27,7 @@
   .product-side-btn { transition: all 0.2s; }
   .product-side-btn:hover { background: #e8faf9 !important; }
   .panel-scroll::-webkit-scrollbar { width: 4px; }
-  .canvas-stage { touch-action: none; overflow: hidden; }
+  .canvas-stage { touch-action: none; overflow: visible; }
   .canvas-stage .canvas-container { position: absolute !important; top: 0 !important; left: 0 !important; }
   .colors-scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; }
   .colors-scroll::-webkit-scrollbar { height: 3px; }
@@ -2141,21 +2141,20 @@ function DesignerApp() {
       canvas.on('object:added', () => { DesignerHistory.save(canvas); checkBounds(); });
       canvas.on('object:removed', () => checkBounds());
 
-      // ── Aggiorna clip-path e zona tratteggiata ad ogni render Fabric ──
       canvas.on('after:render', () => {
         const z = window._designerZone || zone;
         if (!z || !canvas.viewportTransform) return;
         const vt = canvas.viewportTransform;
-        // Converti zona da coordinate Fabric a coordinate CSS pixel
         const tl = { x: z.left * vt[0] + vt[4], y: z.top * vt[3] + vt[5] };
         const br = { x: (z.left + z.width) * vt[0] + vt[4], y: (z.top + z.height) * vt[3] + vt[5] };
-        // Aggiorna clip-path sullo stage div — taglia tutto fuori zona
+        const cw = 400;
+        const ch = canvas.getHeight();
+        // Clip-path sul canvas-stage — taglia solo il canvas Fabric, non il mockup HTML
         const stage = document.querySelector('.canvas-stage');
         if (stage) {
-          const cw = 400, ch = parseFloat(stage.style.height) || canvas.getHeight();
           stage.style.clipPath = `inset(${Math.max(0,tl.y)}px ${Math.max(0,cw-br.x)}px ${Math.max(0,ch-br.y)}px ${Math.max(0,tl.x)}px)`;
         }
-        // Aggiorna zona tratteggiata
+        // Zona tratteggiata segue lo zoom
         const outline = document.getElementById('print-zone-outline');
         if (outline) {
           outline.style.left   = tl.x + 'px';
@@ -2686,52 +2685,46 @@ function DesignerApp() {
             </div>
           )}
 
-          {/* Stage canvas — scalato automaticamente */}
-          <div className="canvas-stage"
-            style={{ position:'relative',
-              width:400, height:svgH,
-              overflow:'hidden',
-              display: product ? 'block' : 'none',
-              transform:`scale(${canvasScale})`,
-              transformOrigin: `${((zone.left + zone.width/2) / 400 * 100).toFixed(1)}% ${((zone.top + zone.height/2) / (svgH) * 100).toFixed(1)}%`,
-              transition:'transform 0.2s',
-              marginTop: isMobile ? 4 : 0,
-              flexShrink: 0,
-              borderRadius:4,
-            }}>
-
-            {/* Sfondo grigio Lumise */}
-            <div style={{
-              position:'absolute', top:0, left:0, width:400, height:svgH,
+          {/* Wrapper esterno — contiene mockup + stage affiancati */}
+          {product && (
+          <div style={{ position:'relative', width:400, height:svgH, flexShrink:0,
+            transform:`scale(${canvasScale})`,
+            transformOrigin: `${((zone.left + zone.width/2) / 400 * 100).toFixed(1)}% ${((zone.top + zone.height/2) / (svgH) * 100).toFixed(1)}%`,
+            transition:'transform 0.2s',
+            marginTop: isMobile ? 4 : 0,
+          }}>
+            {/* Sfondo grigio */}
+            <div style={{ position:'absolute', top:0, left:0, width:400, height:svgH,
               background:'#ebeced', boxShadow:'0 2px 16px rgba(0,0,0,0.10)',
-              borderRadius:4, zIndex:1, pointerEvents:'none',
-            }} />
+              borderRadius:4, zIndex:1, pointerEvents:'none' }} />
 
-            {/* Mockup HTML — fuori dal canvas Fabric, non zooma */}
+            {/* Mockup HTML — fuori dal canvas-stage, non viene tagliato dal clip-path */}
             <img id="mockup-html-layer" src="" alt=""
               style={{ position:'absolute', top:0, left:0, width:400, height:svgH,
                 zIndex:2, pointerEvents:'none', objectFit:'cover' }} />
 
-            {/* Zona stampa tratteggiata */}
-            <div id="print-zone-outline" style={{ position:'absolute', top:zone.top, left:zone.left,
-              width:zone.width, height:zone.height,
+            {/* Zona tratteggiata */}
+            <div id="print-zone-outline" style={{ position:'absolute',
+              top:zone.top, left:zone.left, width:zone.width, height:zone.height,
               border:'1.5px dashed rgba(63,199,186,0.55)',
               borderRadius:4, zIndex:6, pointerEvents:'none',
-              background:'rgba(63,199,186,0.03)',
-              transition:'opacity 0.2s' }}>
+              background:'rgba(63,199,186,0.03)' }}>
               <div style={{ position:'absolute', bottom:-16, left:0, fontSize:9, whiteSpace:'nowrap',
                 color:'rgba(63,199,186,0.7)', fontWeight:600 }}>
                 Zona stampa {currentProduct?.printZoneCm ? `${currentProduct.printZoneCm.w}×${currentProduct.printZoneCm.h}cm` : `${zone.width}×${zone.height}px`}
               </div>
             </div>
 
-            {/* Fabric canvas — clip-path taglia fuori zona, aggiornato via after:render */}
-            <canvas id="main-canvas" style={{
-              position:'absolute', top:0, left:0, zIndex:3, width:400, height:svgH, background:'transparent',
-            }} />
-
-            {/* Preview mask — gestita fuori dallo stage per evitare problemi di scaling */}
+            {/* Canvas Fabric — clip-path aggiornato via after:render */}
+            <div className="canvas-stage"
+              style={{ position:'absolute', top:0, left:0, width:400, height:svgH,
+                zIndex:3, overflow:'visible' }}>
+              <canvas id="main-canvas" style={{
+                position:'absolute', top:0, left:0, width:400, height:svgH, background:'transparent',
+              }} />
+            </div>
           </div>
+          )}
 
           {/* Bottone Preview — toggle DOM diretto, nessun re-render React */}
           {!isMobile && (
