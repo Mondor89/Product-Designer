@@ -2218,6 +2218,10 @@ function DesignerApp() {
       window._designerZone = zone;
 
       // Funzione che applica il clip Lumise-style a un oggetto Fabric 5
+      // Il ctx dentro _render ha origine nel CENTRO dell'oggetto e gia
+      // applicato scale+rotation dell'oggetto. Dobbiamo annullare quelle
+      // trasformazioni, disegnare il clip rect in coordinate canvas assolute
+      // relative al centro, poi ripristinare. Esattamente come Lumise clipto.
       window._applyLumiseClip = (obj, z) => {
         if (!obj || obj._lumiseClip || obj._noClip) return;
         obj._lumiseClip = true;
@@ -2225,31 +2229,37 @@ function DesignerApp() {
         const origRender = obj._render.bind(obj);
 
         obj._render = function(ctx) {
-          const cp = this.getCenterPoint();
           const z = window._designerZone;
           if (!z) { origRender(ctx); return; }
 
-          // Coordinate del clip rect relative al centro dell'oggetto
-          // (come fa Lumise con clipRect.left - centerPoint.x)
+          // getCenterPoint() = posizione centro oggetto in coordinate canvas assolute
+          const cp = this.getCenterPoint();
           const scaleX = this.scaleX || 1;
           const scaleY = this.scaleY || 1;
           const angle  = (this.angle || 0) * Math.PI / 180;
 
-          const x = z.left   - cp.x;
-          const y = z.top    - cp.y;
+          // Coordinate clip rect relative al centro oggetto (sistema Lumise)
+          // x = z.left - cp.x = quanto il bordo sinistro della zona dista dal centro
+          const x = z.left  - cp.x;
+          const y = z.top   - cp.y;
           const w = z.width;
           const h = z.height;
 
           ctx.save();
-          // Annulla la trasformazione dell'oggetto per tornare a coordinate canvas
+
+          // Il ctx e gia ruotato e scalato da Fabric per questo oggetto.
+          // Annulliamo quelle trasformazioni per tornare a coordinate "canvas"
+          // (ma con origine ancora nel centro dell'oggetto)
           ctx.rotate(-angle);
           ctx.scale(1 / scaleX, 1 / scaleY);
 
+          // Ora (0,0) = centro oggetto, assi allineati al canvas
+          // Disegniamo il clip rect con le coordinate relative al centro
           ctx.beginPath();
           ctx.rect(x, y, w, h);
           ctx.clip();
 
-          // Ripristina la trasformazione e disegna l'oggetto
+          // Ripristiniamo le trasformazioni originali e disegniamo
           ctx.scale(scaleX, scaleY);
           ctx.rotate(angle);
 
