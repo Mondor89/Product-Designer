@@ -27,11 +27,8 @@
   .product-side-btn { transition: all 0.2s; }
   .product-side-btn:hover { background: #e8faf9 !important; }
   .panel-scroll::-webkit-scrollbar { width: 4px; }
-  .canvas-stage { touch-action: none; }
-  /* canvas-container creato da Fabric — posizione gestita dal wrapper clip, non forziamo top/left */
-  .canvas-stage .canvas-container { position: absolute !important; overflow: visible !important; }
-  /* Il canvas piccolo (zona stampa) taglia gli oggetti — le maniglie escono fuori */
-  .canvas-stage canvas { overflow: visible !important; }
+  .canvas-stage { touch-action: none; overflow: hidden; }
+  .canvas-stage .canvas-container { position: absolute !important; top: 0 !important; left: 0 !important; }
   .colors-scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; }
   .colors-scroll::-webkit-scrollbar { height: 3px; }
   .colors-scroll::-webkit-scrollbar-thumb { background: #3fc7ba; border-radius: 2px; }
@@ -1801,25 +1798,26 @@ function DesignerApp() {
   // mantenendo luminosità → ombre e pieghe restano visibili
   // Funziona perché: pixel trasparenti (sfondo) → saltati → sfondo grigio visibile
   //                  pixel opachi (t-shirt bianca) → colorati col colore scelto
-  //                  Pixel coloring: scrive risultato su <img id="ws-mockup-img">
-  //                  Il canvas Fabric e piccolo (zona stampa), il mockup sta sotto come img HTML
   useEffect(() => {
+    // Piccolo delay per assicurarsi che il canvas sia pronto al primo mount
     const timer = setTimeout(() => {
     const canvas = window.DesignerCanvas;
-    if (canvas) {
-      canvas.getObjects().filter(o => o._isProductColor || o._isMockupOverlay).forEach(o => canvas.remove(o));
-      canvas.backgroundColor = 'rgba(0,0,0,0)';
-      canvas.renderAll();
-    }
+    if (!canvas) return;
+    const cw = canvas.getWidth();
+    const ch = canvas.getHeight();
 
-    const mockupEl = document.getElementById('ws-mockup-img');
-    if (!mockupEl) return;
+    // Pulisci canvas da eventuali overlay precedenti
+    canvas.getObjects().filter(o => o._isProductColor || o._isMockupOverlay).forEach(o => canvas.remove(o));
+    canvas.setOverlayImage(null, () => {});
+    canvas.setBackgroundColor('rgba(0,0,0,0)', () => {});
+    canvas.backgroundColor = 'rgba(0,0,0,0)';
 
+    // Colora mockup via canvas 2D — no CORS perché URL Netlify è same-origin
     const _cp = PRODUCTS.find(p => p.id === product) || PRODUCTS[0];
     const _side = _cp?.sides?.[sideIndex] || 'Fronte';
-    const mockupUrl = '/mockups/' + product + '/' + (_side === 'Fronte' ? 'fronte' : 'retro') + '.png';
+    const mockupUrl = `/mockups/${product}/${_side === 'Fronte' ? 'fronte' : 'retro'}.png`;
     const loadToken = Date.now();
-    mockupEl._loadToken = loadToken;
+    canvas._mockupToken = loadToken;
 
     const hexToRgb = (hex) => [
       parseInt(hex.slice(1,3),16),
@@ -1829,28 +1827,54 @@ function DesignerApp() {
 
     const img = new Image();
     img.onload = () => {
-      if (mockupEl._loadToken !== loadToken) return;
+      if (canvas._mockupToken !== loadToken) return;
+
+      // Canvas 2D offscreen per manipolazione pixel
       const offscreen = document.createElement('canvas');
       offscreen.width = img.width;
       offscreen.height = img.height;
       const ctx = offscreen.getContext('2d');
       ctx.drawImage(img, 0, 0);
+
       const imageData = ctx.getImageData(0, 0, offscreen.width, offscreen.height);
       const data = imageData.data;
       const col = productColor || '#ffffff';
       const [tr, tg, tb] = hexToRgb(col);
+
       for (let i = 0; i < data.length; i += 4) {
-        if (data[i+3] < 10) continue;
+        if (data[i+3] < 10) continue; // pixel trasparente → salta
+        // Luminosità pixel originale (0=nero, 1=bianco) — mantiene ombre e pieghe
         const lum = (data[i] + data[i+1] + data[i+2]) / 3 / 255;
         data[i]   = Math.round(tr * lum);
         data[i+1] = Math.round(tg * lum);
         data[i+2] = Math.round(tb * lum);
       }
       ctx.putImageData(imageData, 0, 0);
-      mockupEl.src = offscreen.toDataURL();
+
+      // Carica il canvas 2D colorato come fabric.Image — qualità PNG massima
+      fabric.Image.fromURL(offscreen.toDataURL(), (fImg) => {
+        if (canvas._mockupToken !== loadToken) return;
+        // Pulizia DENTRO il callback — rimuove eventuali overlay arrivati in ritardo
+        canvas.getObjects().filter(o => o._isMockupOverlay).forEach(o => canvas.remove(o));
+        fImg.scaleToWidth(cw);
+        if (fImg.getScaledHeight() < ch) fImg.scaleToHeight(ch);
+        fImg.set({
+          left: 0, top: 0,
+          originX: 'left', originY: 'top',
+          selectable: false, evented: false,
+          hasControls: false, hasBorders: false,
+          lockMovementX: true, lockMovementY: true,
+          hoverCursor: 'default',
+          _isMockupOverlay: true,
+          _noClip: true,
+        });
+        canvas.add(fImg);
+        canvas.bringToFront(fImg);
+        canvas.renderAll();
+      });
     };
     img.src = mockupUrl;
-    }, 50);
+    }, 50); // delay 50ms
     return () => clearTimeout(timer);
   }, [productColor, product, sideIndex, canvasReady, mockupKey]);
 
@@ -1903,25 +1927,27 @@ function DesignerApp() {
   const checkBounds = useCallback(() => {
     const c = window.DesignerCanvas;
     if (!c) return;
-    // Il canvas ora ha dimensioni = zona stampa, quindi (0,0) = top-left zona
-    const z = { left:0, top:0, width:zone.width, height:zone.height };
+    const z = zone;
     let outside = false;
     const imgWarns = [];
     const imgCfg = AdminStore.get('imageSettings');
-    const tol = 8;
+    const tol = 8; // tolleranza pixel per bordi
     c.getObjects().forEach(obj => {
       let br;
       if (obj.type === 'curved-text') {
+        // CurvedText: bounding box include tutto il cerchio
+        // Usa solo il centro dell'oggetto per capire se è nella zona
         const cx = obj.left + (obj.width  || 0) / 2;
         const cy = obj.top  + (obj.height || 0) / 2;
-        const inZone = cx >= 0 && cx <= z.width && cy >= 0 && cy <= z.height;
+        const inZone = cx >= z.left && cx <= z.left + z.width &&
+                       cy >= z.top  && cy <= z.top  + z.height;
         if (!inZone) outside = true;
-        return;
+        return; // salta il check normale per curved-text
       }
       br = obj.getBoundingRect(false, true);
-      if (br.left < -tol || br.top < -tol ||
-          br.left + br.width > z.width + tol ||
-          br.top + br.height > z.height) {
+      if (br.left < z.left - tol || br.top < z.top - tol ||
+          br.left + br.width > z.left + z.width + tol ||
+          br.top + br.height > z.top + z.height) {
         outside = true;
       }
       // Image quality check
@@ -1944,29 +1970,23 @@ function DesignerApp() {
     const init = () => {
       const el = document.getElementById('main-canvas');
       if (!el || window.DesignerCanvas) return;
-      // Canvas Fabric = dimensioni zona stampa (non il mockup intero)
-      // La zona e gia calcolata in React e disponibile via closure
-      const cw = zone.width;
-      const ch = zone.height;
+      const svgH = product === 'hoodie' ? 533 : product === 'longsleeve' ? 500 : 475;
       const canvas = new fabric.Canvas('main-canvas', {
-        width: cw, height: ch, preserveObjectStacking: true,
+        width: 400, height: svgH, preserveObjectStacking: true,
         backgroundColor: 'rgba(0,0,0,0)',
       });
       window.DesignerCanvas = canvas;
-      window._canvasZoneW = cw;
-      window._canvasZoneH = ch;
 
-      // Fabric avvolge <canvas> in .canvas-container e lo posiziona assoluto
-      // rispetto al parent (.canvas-stage). Dobbiamo spostarlo a zone.top/left
-      // perche il canvas element sta li nel DOM.
+      // ── Forza dimensioni wrapper Fabric = canvas ──────────────
+      // Fabric crea un div.canvas-container che può fuoriuscire dal parent
       const wrapper = el.parentElement;
       if (wrapper && wrapper.classList.contains('canvas-container')) {
-        wrapper.style.width    = cw + 'px';
-        wrapper.style.height   = ch + 'px';
+        wrapper.style.width = '400px';
+        wrapper.style.height = svgH + 'px';
         wrapper.style.position = 'absolute';
-        wrapper.style.top      = zone.top  + 'px';
-        wrapper.style.left     = zone.left + 'px';
-        wrapper.style.overflow = 'visible';
+        wrapper.style.top = '0';
+        wrapper.style.left = '0';
+        wrapper.style.overflow = 'hidden';
       }
 
       // ── Nascondi TUTTI i controlli default Fabric ─────────────
@@ -2162,10 +2182,11 @@ function DesignerApp() {
       canvas.on('object:added', () => { DesignerHistory.save(canvas); checkBounds(); });
       canvas.on('object:removed', () => checkBounds());
 
-      // ── Rotella del mouse → zoom CSS (desktop) ────────────────────
+      // ── Rotella del mouse → zoom (desktop) ─────────────────────
       const canvasEl = canvas.getElement().parentElement;
       const onWheel = (e) => {
         e.preventDefault();
+        // Rotella su = zoom in, giù = zoom out (min 100 = fit schermo)
         setZoom(z => {
           const delta = e.deltaY > 0 ? -8 : 8;
           return Math.min(200, Math.max(100, z + delta));
@@ -2174,6 +2195,7 @@ function DesignerApp() {
       canvasEl.addEventListener('wheel', onWheel, { passive: false });
 
       // ── Pinch-to-zoom touch (mobile + tablet) ───────────────────
+      // Stesso zoom dello slider — min 100 (fit schermo), max 200
       let lastDist = null;
       const onTouchStart = (e) => {
         if (e.touches.length === 2) lastDist = null;
@@ -2185,8 +2207,9 @@ function DesignerApp() {
         const dy = e.touches[0].clientY - e.touches[1].clientY;
         const dist = Math.sqrt(dx*dx + dy*dy);
         if (lastDist !== null) {
-          const delta = (dist - lastDist) * 0.4;
+          const delta = (dist - lastDist) * 0.4; // sensibilità pinch
           setZoom(z => Math.min(200, Math.max(100, z + delta)));
+          // Mostra barra zoom mentre si pincha, nasconde dopo 2s
           showZoomBarTemp();
         }
         lastDist = dist;
@@ -2196,10 +2219,21 @@ function DesignerApp() {
       canvasEl.addEventListener('touchmove', onTouchMove, { passive: false });
       canvasEl.addEventListener('touchend', onTouchEnd, { passive: true });
 
-      // zona disponibile globalmente — coordinate relative al canvas (0,0 = top-left zona)
-      window._designerZone = { left:0, top:0, width:zone.width, height:zone.height };
-
-      // overlay rimosso — canvas piccolo taglia automaticamente
+      // ── ClipPath per oggetto — taglia solo il contenuto, non i controlli ──
+      // Funzione globale per creare clipRect per ogni oggetto
+      window._designerZone = zone;
+      window._makeClipRect = (z) => new fabric.Rect({
+        left: z.left, top: z.top,
+        width: z.width, height: z.height,
+        absolutePositioned: true,
+      });
+      // Applica clipPath a ogni nuovo oggetto aggiunto
+      canvas.on('object:added', (e) => {
+        const obj = e.target;
+        if (!obj || obj._noClip || obj.clipPath) return;
+        const z = window._designerZone || zone;
+        if (window._makeClipRect) obj.clipPath = window._makeClipRect(z);
+      });
 
 
       setTimeout(() => {
@@ -2272,10 +2306,8 @@ function DesignerApp() {
   const addElement = useCallback((el) => {
     const canvas = window.DesignerCanvas;
     if (!canvas) return;
-    // Coordinate relative al canvas (che ora e = zona stampa)
-    // (0,0) = angolo top-left della zona stampa
-    const cx = zone.width / 2;
-    const cy = zone.height / 2;
+    const cx = zone.left + zone.width / 2;
+    const cy = zone.top + zone.height / 2;
 
     if (el.type === 'text') {
       const placeholderText = 'Scrivi qui...';
@@ -2316,7 +2348,8 @@ function DesignerApp() {
           }
         });
         // Applica clipPath prima di add
-        // clip gestito da object:added listener
+        if (window._makeClipRect) curvedObj.clipPath = window._makeClipRect(window._designerZone || zone);
+        curvedObj._noClip = true;
         // Posiziona con stima iniziale
         curvedObj.set({ left: cx - crvRadius - 10, top: cy - crvRadius * 0.4 });
         canvas.add(curvedObj);
@@ -2374,7 +2407,8 @@ function DesignerApp() {
         top:  cy - estH / 2,
       });
       // Applica clipPath prima di add
-      // clip gestito da object:added listener
+      if (window._makeClipRect) obj.clipPath = window._makeClipRect(window._designerZone || zone);
+      obj._noClip = true;
       canvas.add(obj);
       // Dopo render corregge con dimensioni reali
       setTimeout(() => {
@@ -2395,11 +2429,11 @@ function DesignerApp() {
       fabric.Image.fromURL(el.src, (img) => {
         const s = Math.min((zone.width - 10) / img.width, (zone.height - 10) / img.height, 1);
         img.set({ left: cx, top: cy, originX: 'center', originY: 'center', scaleX: s, scaleY: s });
-        // cx/cy = centro zona stampa in coordinate canvas (zone.width/2, zone.height/2)
         img._originalW = img.width;
         img._originalH = img.height;
         img.__uid = `img_${Date.now()}`;
-        // clip gestito da object:added listener
+        if (window._makeClipRect) img.clipPath = window._makeClipRect(window._designerZone || zone);
+        img._noClip = true;
         canvas.add(img); canvas.setActiveObject(img); canvas.renderAll();
         checkBounds();
       }, { crossOrigin: 'anonymous' });
@@ -2495,8 +2529,7 @@ function DesignerApp() {
   const [mobileActiveTab, setMobileActiveTab] = useState(null);
   // stageRef rimosso — preview gestita via Fabric.js
 
-  // canvasScale = baseScale * zoom utente
-  // CSS scale su wrapper interno che contiene mockup + canvas insieme
+  // canvasScale = fit base * zoom utente (zoom state condiviso desktop+mobile)
   const canvasScale = baseScale * (zoom / 100);
 
 
@@ -2644,72 +2677,53 @@ function DesignerApp() {
             </div>
           )}
 
-          {/* Stage esterno — solo fit schermo (baseScale), no overflow hidden */}
+          {/* Stage canvas — scalato automaticamente */}
           <div className="canvas-stage"
             style={{ position:'relative',
               width:400, height:svgH,
+              overflow:'hidden',
               display: product ? 'block' : 'none',
-              transform:'scale(' + baseScale + ')',
-              transformOrigin:'center top',
-              transition:'transform 0.15s',
+              transform:`scale(${canvasScale})`,
+              transformOrigin: `${((zone.left + zone.width/2) / 400 * 100).toFixed(1)}% ${((zone.top + zone.height/2) / (svgH) * 100).toFixed(1)}%`,
+              transition:'transform 0.2s',
               marginTop: isMobile ? 4 : 0,
               flexShrink: 0,
-              overflow:'visible',
+              borderRadius:4,
             }}>
 
-            {/* Sfondo grigio — dietro tutto */}
+            {/* Sfondo grigio Lumise — visibile fuori dalla sagoma del PNG trasparente */}
             <div style={{
               position:'absolute', top:0, left:0, width:400, height:svgH,
               background:'#ebeced',
               boxShadow:'0 2px 16px rgba(0,0,0,0.10)',
               borderRadius:4,
-              zIndex:0, pointerEvents:'none',
+              zIndex:1, pointerEvents:'none',
             }} />
 
-            {/* Mockup colorato — img HTML sotto il canvas */}
-            <img id="ws-mockup-img" alt=""
-              style={{
-                position:'absolute', top:0, left:0,
-                width:400, height:svgH,
-                objectFit:'fill',
-                zIndex:1, pointerEvents:'none',
-                display: product ? 'block' : 'none',
-                transformOrigin: ((zone.left + zone.width/2)/400*100).toFixed(1) + '% ' + ((zone.top + zone.height/2)/svgH*100).toFixed(1) + '%',
-                transform:'scale(' + (zoom/100) + ')',
-                transition:'transform 0.15s',
-              }}
-            />
+            {/* Mockup colorato via pixel coloring — canvas 2D offscreen + fabric.Image */}
 
-            {/* Canvas Fabric — dimensioni zona stampa, scala con zoom utente */}
-            {/* overflow:visible — maniglie possono uscire fuori dalla zona */}
-            <canvas id="main-canvas" style={{
-              position:'absolute',
-              top:zone.top, left:zone.left,
-              zIndex:2,
-              width:zone.width, height:zone.height,
-              background:'transparent',
-              transformOrigin: '50% 50%',
-              transform:'scale(' + (zoom/100) + ')',
-              transition:'transform 0.15s',
-            }} />
-
-            {/* Cornice tratteggiata zona stampa */}
-            <div id="print-zone-outline" style={{
-              position:'absolute', top:zone.top, left:zone.left,
+            {/* Zona stampa tratteggiata */}
+            {/* Zona tratteggiata — id per toggle DOM diretto senza re-render */}
+            <div id="print-zone-outline" style={{ position:'absolute', top:zone.top, left:zone.left,
               width:zone.width, height:zone.height,
               border:'1.5px dashed rgba(63,199,186,0.55)',
-              borderRadius:4, zIndex:3, pointerEvents:'none',
+              borderRadius:4, zIndex:4, pointerEvents:'none',
               background:'rgba(63,199,186,0.03)',
-              transition:'opacity 0.2s',
-              transformOrigin:'50% 50%',
-              transform:'scale(' + (zoom/100) + ')',
-            }}>
+              transition:'opacity 0.2s' }}>
               <div style={{ position:'absolute', bottom:-16, left:0, fontSize:9, whiteSpace:'nowrap',
                 color:'rgba(63,199,186,0.7)', fontWeight:600 }}>
-                Zona stampa {currentProduct?.printZoneCm ? `${currentProduct.printZoneCm.w}x${currentProduct.printZoneCm.h}cm` : `${zone.width}x${zone.height}px`}
+                Zona stampa {currentProduct?.printZoneCm ? `${currentProduct.printZoneCm.w}×${currentProduct.printZoneCm.h}cm` : `${zone.width}×${zone.height}px`}
               </div>
             </div>
 
+            {/* Preview mask — gestita tramite clip-path sul canvas stage (vedi sotto) */}
+
+            {/* Fabric canvas */}
+            <canvas id="main-canvas" style={{
+              position:'absolute', top:0, left:0, zIndex:3, width:400, height:svgH, background:'transparent',
+            }} />
+
+            {/* Preview mask — gestita fuori dallo stage per evitare problemi di scaling */}
           </div>
 
           {/* Bottone Preview — toggle DOM diretto, nessun re-render React */}
