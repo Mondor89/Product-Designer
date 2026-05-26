@@ -1869,6 +1869,7 @@ function DesignerApp() {
           _noClip: true,
         });
         canvas.add(fImg);
+        fImg.clipPath = null; // sicurezza: il mockup non deve mai avere clipPath
         canvas.bringToFront(fImg);
         canvas.renderAll();
       });
@@ -2253,7 +2254,7 @@ function DesignerApp() {
       // Applica clipPath a ogni nuovo oggetto aggiunto
       canvas.on('object:added', (e) => {
         const obj = e.target;
-        if (!obj || obj._noClip || obj.clipPath) return;
+        if (!obj || obj._noClip || obj._isMockupOverlay || obj.clipPath) return;
         const z = window._designerZone || zone;
         if (window._makeClipRect) obj.clipPath = window._makeClipRect(z);
       });
