@@ -27,7 +27,7 @@
   .product-side-btn { transition: all 0.2s; }
   .product-side-btn:hover { background: #e8faf9 !important; }
   .panel-scroll::-webkit-scrollbar { width: 4px; }
-  .canvas-stage { touch-action: none; overflow: hidden; }
+  .canvas-stage { touch-action: none; }
   /* canvas-container creato da Fabric — posizione gestita dal wrapper clip, non forziamo top/left */
   .canvas-stage .canvas-container { position: absolute !important; }
   .colors-scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; }
@@ -1799,25 +1799,25 @@ function DesignerApp() {
   // mantenendo luminosità → ombre e pieghe restano visibili
   // Funziona perché: pixel trasparenti (sfondo) → saltati → sfondo grigio visibile
   //                  pixel opachi (t-shirt bianca) → colorati col colore scelto
-  //                  NUOVO: mockup colorato salvato in window._mockupImage
-  //                  L'overlay canvas 2D lo disegna insieme ai 4 rettangoli grigi
+  //                  Pixel coloring: scrive risultato su <img id="ws-mockup-img">
+  //                  Il canvas Fabric e piccolo (zona stampa), il mockup sta sotto come img HTML
   useEffect(() => {
     const timer = setTimeout(() => {
-    // Pulisci eventuali oggetti mockup residui dal canvas Fabric
     const canvas = window.DesignerCanvas;
     if (canvas) {
       canvas.getObjects().filter(o => o._isProductColor || o._isMockupOverlay).forEach(o => canvas.remove(o));
-      canvas.setOverlayImage(null, () => {});
-      canvas.setBackgroundColor('rgba(0,0,0,0)', () => {});
       canvas.backgroundColor = 'rgba(0,0,0,0)';
       canvas.renderAll();
     }
 
+    const mockupEl = document.getElementById('ws-mockup-img');
+    if (!mockupEl) return;
+
     const _cp = PRODUCTS.find(p => p.id === product) || PRODUCTS[0];
     const _side = _cp?.sides?.[sideIndex] || 'Fronte';
-    const mockupUrl = `/mockups/${product}/${_side === 'Fronte' ? 'fronte' : 'retro'}.png`;
+    const mockupUrl = '/mockups/' + product + '/' + (_side === 'Fronte' ? 'fronte' : 'retro') + '.png';
     const loadToken = Date.now();
-    window._mockupLoadToken = loadToken;
+    mockupEl._loadToken = loadToken;
 
     const hexToRgb = (hex) => [
       parseInt(hex.slice(1,3),16),
@@ -1827,20 +1827,16 @@ function DesignerApp() {
 
     const img = new Image();
     img.onload = () => {
-      if (window._mockupLoadToken !== loadToken) return;
-
-      // Canvas 2D offscreen per pixel coloring
+      if (mockupEl._loadToken !== loadToken) return;
       const offscreen = document.createElement('canvas');
       offscreen.width = img.width;
       offscreen.height = img.height;
       const ctx = offscreen.getContext('2d');
       ctx.drawImage(img, 0, 0);
-
       const imageData = ctx.getImageData(0, 0, offscreen.width, offscreen.height);
       const data = imageData.data;
       const col = productColor || '#ffffff';
       const [tr, tg, tb] = hexToRgb(col);
-
       for (let i = 0; i < data.length; i += 4) {
         if (data[i+3] < 10) continue;
         const lum = (data[i] + data[i+1] + data[i+2]) / 3 / 255;
@@ -1849,15 +1845,7 @@ function DesignerApp() {
         data[i+2] = Math.round(tb * lum);
       }
       ctx.putImageData(imageData, 0, 0);
-
-      // Salva il mockup colorato come Image pronta per drawImage
-      const coloredImg = new Image();
-      coloredImg.onload = () => {
-        window._mockupImage = coloredImg;
-        // Forza ridisegno overlay
-        if (canvas) canvas.renderAll();
-      };
-      coloredImg.src = offscreen.toDataURL();
+      mockupEl.src = offscreen.toDataURL();
     };
     img.src = mockupUrl;
     }, 50);
@@ -1913,27 +1901,25 @@ function DesignerApp() {
   const checkBounds = useCallback(() => {
     const c = window.DesignerCanvas;
     if (!c) return;
-    const z = zone;
+    // Il canvas ora ha dimensioni = zona stampa, quindi (0,0) = top-left zona
+    const z = { left:0, top:0, width:zone.width, height:zone.height };
     let outside = false;
     const imgWarns = [];
     const imgCfg = AdminStore.get('imageSettings');
-    const tol = 8; // tolleranza pixel per bordi
+    const tol = 8;
     c.getObjects().forEach(obj => {
       let br;
       if (obj.type === 'curved-text') {
-        // CurvedText: bounding box include tutto il cerchio
-        // Usa solo il centro dell'oggetto per capire se è nella zona
         const cx = obj.left + (obj.width  || 0) / 2;
         const cy = obj.top  + (obj.height || 0) / 2;
-        const inZone = cx >= z.left && cx <= z.left + z.width &&
-                       cy >= z.top  && cy <= z.top  + z.height;
+        const inZone = cx >= 0 && cx <= z.width && cy >= 0 && cy <= z.height;
         if (!inZone) outside = true;
-        return; // salta il check normale per curved-text
+        return;
       }
       br = obj.getBoundingRect(false, true);
-      if (br.left < z.left - tol || br.top < z.top - tol ||
-          br.left + br.width > z.left + z.width + tol ||
-          br.top + br.height > z.top + z.height) {
+      if (br.left < -tol || br.top < -tol ||
+          br.left + br.width > z.width + tol ||
+          br.top + br.height > z.height) {
         outside = true;
       }
       // Image quality check
@@ -1956,20 +1942,24 @@ function DesignerApp() {
     const init = () => {
       const el = document.getElementById('main-canvas');
       if (!el || window.DesignerCanvas) return;
-      const svgH = product === 'hoodie' ? 533 : product === 'longsleeve' ? 500 : 475;
+      // Canvas Fabric = dimensioni zona stampa (non il mockup intero)
+      // La zona e gia calcolata in React e disponibile via closure
+      const cw = zone.width;
+      const ch = zone.height;
       const canvas = new fabric.Canvas('main-canvas', {
-        width: 400, height: svgH, preserveObjectStacking: true,
+        width: cw, height: ch, preserveObjectStacking: true,
         backgroundColor: 'rgba(0,0,0,0)',
       });
       window.DesignerCanvas = canvas;
+      window._canvasZoneW = cw;
+      window._canvasZoneH = ch;
 
-      // ── Forza dimensioni wrapper Fabric = canvas intero ──────────
-      // Fabric crea un div.canvas-container — deve coprire tutto il canvas (400xsvgH)
-      // Il taglio è gestito dal wrapper clip esterno, non da questo div
+      // Fabric crea .canvas-container — lo forziamo alle dimensioni della zona
+      // overflow:visible per far uscire le maniglie fuori dalla zona stampa
       const wrapper = el.parentElement;
       if (wrapper && wrapper.classList.contains('canvas-container')) {
-        wrapper.style.width = '400px';
-        wrapper.style.height = svgH + 'px';
+        wrapper.style.width  = cw + 'px';
+        wrapper.style.height = ch + 'px';
         wrapper.style.position = 'absolute';
         wrapper.style.top  = '0';
         wrapper.style.left = '0';
@@ -2206,43 +2196,10 @@ function DesignerApp() {
       canvasEl.addEventListener('touchmove', onTouchMove, { passive: false });
       canvasEl.addEventListener('touchend', onTouchEnd, { passive: true });
 
-      // zona disponibile globalmente per l'overlay canvas
-      window._designerZone = zone;
+      // zona disponibile globalmente — coordinate relative al canvas (0,0 = top-left zona)
+      window._designerZone = { left:0, top:0, width:zone.width, height:zone.height };
 
-      // ── Overlay canvas 2D — ridisegna 4 rettangoli grigi fuori zona ──
-      // Si aggancia ad after:render di Fabric: ad ogni frame Fabric ridisegna
-      // gli oggetti, poi noi ridisegniamo i 4 rettangoli sopra.
-      // pointerEvents:none sul canvas overlay → click passano al canvas Fabric.
-      const overlayEl = document.getElementById('overlay-canvas');
-      if (overlayEl) {
-        overlayEl.width  = 400;
-        overlayEl.height = svgH;
-        const overlayCtx = overlayEl.getContext('2d');
-        const drawOverlay = () => {
-          const z = window._designerZone;
-          if (!z || !overlayCtx) return;
-          overlayCtx.clearRect(0, 0, 400, svgH);
-
-          // 1. Disegna mockup colorato (sotto i rettangoli grigi)
-          if (window._mockupImage) {
-            overlayCtx.drawImage(window._mockupImage, 0, 0, 400, svgH);
-          }
-
-          // 2. Disegna 4 rettangoli grigi sopra il mockup fuori dalla zona stampa
-          overlayCtx.fillStyle = '#ebeced';
-          // TOP
-          overlayCtx.fillRect(0, 0, 400, z.top);
-          // BOTTOM
-          overlayCtx.fillRect(0, z.top + z.height, 400, svgH - z.top - z.height);
-          // LEFT
-          overlayCtx.fillRect(0, z.top, z.left, z.height);
-          // RIGHT
-          overlayCtx.fillRect(z.left + z.width, z.top, 400 - z.left - z.width, z.height);
-        };
-        // Disegna subito e ad ogni render Fabric
-        drawOverlay();
-        canvas.on('after:render', drawOverlay);
-      }
+      // overlay rimosso — canvas piccolo taglia automaticamente
 
 
       setTimeout(() => {
@@ -2315,8 +2272,10 @@ function DesignerApp() {
   const addElement = useCallback((el) => {
     const canvas = window.DesignerCanvas;
     if (!canvas) return;
-    const cx = zone.left + zone.width / 2;
-    const cy = zone.top + zone.height / 2;
+    // Coordinate relative al canvas (che ora e = zona stampa)
+    // (0,0) = angolo top-left della zona stampa
+    const cx = zone.width / 2;
+    const cy = zone.height / 2;
 
     if (el.type === 'text') {
       const placeholderText = 'Scrivi qui...';
@@ -2436,6 +2395,7 @@ function DesignerApp() {
       fabric.Image.fromURL(el.src, (img) => {
         const s = Math.min((zone.width - 10) / img.width, (zone.height - 10) / img.height, 1);
         img.set({ left: cx, top: cy, originX: 'center', originY: 'center', scaleX: s, scaleY: s });
+        // cx/cy = centro zona stampa in coordinate canvas (zone.width/2, zone.height/2)
         img._originalW = img.width;
         img._originalH = img.height;
         img.__uid = `img_${Date.now()}`;
@@ -2683,60 +2643,65 @@ function DesignerApp() {
             </div>
           )}
 
-          {/* Stage canvas — scalato automaticamente */}
+          {/* Stage — wrapper scalabile che contiene mockup + canvas zona stampa */}
+          {/* transform:scale centrato sulla zona stampa = zoom nitido stile Lumise */}
           <div className="canvas-stage"
             style={{ position:'relative',
               width:400, height:svgH,
-              overflow:'hidden',
               display: product ? 'block' : 'none',
-              transform:`scale(${canvasScale})`,
-              transformOrigin: `${((zone.left + zone.width/2) / 400 * 100).toFixed(1)}% ${((zone.top + zone.height/2) / (svgH) * 100).toFixed(1)}%`,
+              transform:'scale(' + canvasScale + ')',
+              transformOrigin:'center top',
               transition:'transform 0.2s',
               marginTop: isMobile ? 4 : 0,
               flexShrink: 0,
-              borderRadius:4,
             }}>
 
-            {/* Sfondo grigio Lumise — visibile fuori dalla sagoma del PNG trasparente */}
+            {/* Sfondo grigio — dietro tutto */}
             <div style={{
               position:'absolute', top:0, left:0, width:400, height:svgH,
               background:'#ebeced',
               boxShadow:'0 2px 16px rgba(0,0,0,0.10)',
               borderRadius:4,
-              zIndex:1, pointerEvents:'none',
+              zIndex:0, pointerEvents:'none',
             }} />
 
-            {/* Mockup disegnato direttamente sull'overlay canvas 2D */}
+            {/* Mockup colorato — img HTML, zIndex:1, copre tutto il prodotto */}
+            <img id="ws-mockup-img" alt=""
+              style={{
+                position:'absolute', top:0, left:0,
+                width:400, height:svgH,
+                objectFit:'fill',
+                zIndex:1, pointerEvents:'none',
+                display: product ? 'block' : 'none',
+              }}
+            />
 
-            {/* Zona stampa tratteggiata */}
-            {/* Zona tratteggiata — id per toggle DOM diretto senza re-render */}
-            <div id="print-zone-outline" style={{ position:'absolute', top:zone.top, left:zone.left,
+            {/* Canvas Fabric — SOLO dimensioni zona stampa, posizionato sopra il mockup */}
+            {/* overflow:visible permette alle maniglie di uscire fuori dalla zona */}
+            {/* Il canvas piccolo taglia automaticamente gli oggetti ai suoi bordi */}
+            <canvas id="main-canvas" style={{
+              position:'absolute',
+              top:zone.top, left:zone.left,
+              zIndex:2,
+              width:zone.width, height:zone.height,
+              background:'transparent',
+              overflow:'visible',
+            }} />
+
+            {/* Cornice tratteggiata zona stampa — sopra il canvas */}
+            <div id="print-zone-outline" style={{
+              position:'absolute', top:zone.top, left:zone.left,
               width:zone.width, height:zone.height,
               border:'1.5px dashed rgba(63,199,186,0.55)',
-              borderRadius:4, zIndex:5, pointerEvents:'none',
+              borderRadius:4, zIndex:3, pointerEvents:'none',
               background:'rgba(63,199,186,0.03)',
               transition:'opacity 0.2s' }}>
               <div style={{ position:'absolute', bottom:-16, left:0, fontSize:9, whiteSpace:'nowrap',
                 color:'rgba(63,199,186,0.7)', fontWeight:600 }}>
-                Zona stampa {currentProduct?.printZoneCm ? `${currentProduct.printZoneCm.w}×${currentProduct.printZoneCm.h}cm` : `${zone.width}×${zone.height}px`}
+                Zona stampa {currentProduct?.printZoneCm ? `${currentProduct.printZoneCm.w}x${currentProduct.printZoneCm.h}cm` : `${zone.width}x${zone.height}px`}
               </div>
             </div>
 
-            {/* Canvas Fabric — pieno, nessun clip interno */}
-            <canvas id="main-canvas" style={{
-              position:'absolute', top:0, left:0,
-              zIndex:3, width:400, height:svgH,
-              background:'transparent',
-            }} />
-
-            {/* Canvas overlay 2D — ridisegna 4 rettangoli grigi fuori zona ad ogni after:render */}
-            <canvas id="overlay-canvas" style={{
-              position:'absolute', top:0, left:0,
-              zIndex:4, width:400, height:svgH,
-              pointerEvents:'none',
-            }} />
-
-            {/* Preview mask — gestita fuori dallo stage per evitare problemi di scaling */}
           </div>
 
           {/* Bottone Preview — toggle DOM diretto, nessun re-render React */}
