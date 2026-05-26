@@ -2182,20 +2182,32 @@ function DesignerApp() {
       canvas.on('object:added', () => { DesignerHistory.save(canvas); checkBounds(); });
       canvas.on('object:removed', () => checkBounds());
 
-      // ── Rotella del mouse → zoom (desktop) ─────────────────────
+      // ── Zoom via Fabric zoomToPoint — vettori sempre nitidi ──────────
+      // Il centro dello zoom e il centro della zona stampa in coord canvas
       const canvasEl = canvas.getElement().parentElement;
+      const zoomCx = zone.left + zone.width  / 2;
+      const zoomCy = zone.top  + zone.height / 2;
+      const zoomPt = new fabric.Point(zoomCx, zoomCy);
+
+      // Applica zoom Fabric + aggiorna stato React per la barra %
+      const applyZoom = (pct) => {
+        const clamped = Math.min(200, Math.max(100, Math.round(pct)));
+        const fabricZoom = clamped / 100;
+        canvas.zoomToPoint(zoomPt, fabricZoom);
+        setZoom(clamped);
+        return clamped;
+      };
+      window._designerApplyZoom = applyZoom;
+
       const onWheel = (e) => {
         e.preventDefault();
-        // Rotella su = zoom in, giù = zoom out (min 100 = fit schermo)
-        setZoom(z => {
-          const delta = e.deltaY > 0 ? -8 : 8;
-          return Math.min(200, Math.max(100, z + delta));
-        });
+        const current = Math.round(canvas.getZoom() * 100);
+        const delta = e.deltaY > 0 ? -8 : 8;
+        applyZoom(current + delta);
       };
       canvasEl.addEventListener('wheel', onWheel, { passive: false });
 
       // ── Pinch-to-zoom touch (mobile + tablet) ───────────────────
-      // Stesso zoom dello slider — min 100 (fit schermo), max 200
       let lastDist = null;
       const onTouchStart = (e) => {
         if (e.touches.length === 2) lastDist = null;
@@ -2207,9 +2219,9 @@ function DesignerApp() {
         const dy = e.touches[0].clientY - e.touches[1].clientY;
         const dist = Math.sqrt(dx*dx + dy*dy);
         if (lastDist !== null) {
-          const delta = (dist - lastDist) * 0.4; // sensibilità pinch
-          setZoom(z => Math.min(200, Math.max(100, z + delta)));
-          // Mostra barra zoom mentre si pincha, nasconde dopo 2s
+          const current = Math.round(canvas.getZoom() * 100);
+          const delta = (dist - lastDist) * 0.4;
+          applyZoom(current + delta);
           showZoomBarTemp();
         }
         lastDist = dist;
@@ -2219,21 +2231,19 @@ function DesignerApp() {
       canvasEl.addEventListener('touchmove', onTouchMove, { passive: false });
       canvasEl.addEventListener('touchend', onTouchEnd, { passive: true });
 
-      // ── ClipPath per oggetto — taglia solo il contenuto, non i controlli ──
-      // Funzione globale per creare clipRect per ogni oggetto
+      // ── ClipPath GLOBALE sul canvas — taglia tutto alla zona stampa ──────
+      // fabric.Rect con absolutePositioned:true applicato a canvas.clipPath
+      // Questo taglia tutto quello che Fabric disegna (oggetti + maniglie)
+      // ai bordi della zona stampa. E la soluzione piu semplice e affidabile.
       window._designerZone = zone;
-      window._makeClipRect = (z) => new fabric.Rect({
-        left: z.left, top: z.top,
-        width: z.width, height: z.height,
+      const globalClip = new fabric.Rect({
+        left: zone.left,
+        top: zone.top,
+        width: zone.width,
+        height: zone.height,
         absolutePositioned: true,
       });
-      // Applica clipPath a ogni nuovo oggetto aggiunto
-      canvas.on('object:added', (e) => {
-        const obj = e.target;
-        if (!obj || obj._noClip || obj.clipPath) return;
-        const z = window._designerZone || zone;
-        if (window._makeClipRect) obj.clipPath = window._makeClipRect(z);
-      });
+      canvas.clipPath = globalClip;
 
 
       setTimeout(() => {
@@ -2348,8 +2358,7 @@ function DesignerApp() {
           }
         });
         // Applica clipPath prima di add
-        if (window._makeClipRect) curvedObj.clipPath = window._makeClipRect(window._designerZone || zone);
-        curvedObj._noClip = true;
+        // clip globale sul canvas — non serve per oggetto
         // Posiziona con stima iniziale
         curvedObj.set({ left: cx - crvRadius - 10, top: cy - crvRadius * 0.4 });
         canvas.add(curvedObj);
@@ -2407,8 +2416,7 @@ function DesignerApp() {
         top:  cy - estH / 2,
       });
       // Applica clipPath prima di add
-      if (window._makeClipRect) obj.clipPath = window._makeClipRect(window._designerZone || zone);
-      obj._noClip = true;
+      // clip globale sul canvas — non serve per oggetto
       canvas.add(obj);
       // Dopo render corregge con dimensioni reali
       setTimeout(() => {
@@ -2432,8 +2440,7 @@ function DesignerApp() {
         img._originalW = img.width;
         img._originalH = img.height;
         img.__uid = `img_${Date.now()}`;
-        if (window._makeClipRect) img.clipPath = window._makeClipRect(window._designerZone || zone);
-        img._noClip = true;
+        // clip globale sul canvas — non serve per oggetto
         canvas.add(img); canvas.setActiveObject(img); canvas.renderAll();
         checkBounds();
       }, { crossOrigin: 'anonymous' });
@@ -2530,7 +2537,9 @@ function DesignerApp() {
   // stageRef rimosso — preview gestita via Fabric.js
 
   // canvasScale = fit base * zoom utente (zoom state condiviso desktop+mobile)
-  const canvasScale = baseScale * (zoom / 100);
+  // canvasScale = solo fit schermo (baseScale)
+  // Lo zoom utente e gestito da Fabric zoomToPoint — vettori sempre nitidi
+  const canvasScale = baseScale;
 
 
 
@@ -2579,14 +2588,14 @@ function DesignerApp() {
           <>
             <div style={{ width:1, height:28, background:'rgba(255,255,255,0.1)', margin:'0 2px', flexShrink:0 }} />
             <div style={{ display:'flex', alignItems:'center', gap:5, flexShrink:0 }}>
-              <button onClick={() => setZoom(z => Math.max(100, z-10))}
+              <button onClick={() => { if(window._designerApplyZoom) window._designerApplyZoom(zoom-10); else setZoom(z=>Math.max(100,z-10)); }}
                 style={{ background:'rgba(255,255,255,0.08)', border:'none', color:'#aaa',
                   borderRadius:4, width:20, height:20, cursor:'pointer', fontSize:14,
                   display:'flex', alignItems:'center', justifyContent:'center', lineHeight:1 }}>–</button>
               <input type="range" min={100} max={200} value={Math.round(zoom)}
-                onChange={e => setZoom(+e.target.value)}
+                onChange={e => { if(window._designerApplyZoom) window._designerApplyZoom(+e.target.value); else setZoom(+e.target.value); }}
                 style={{ width:80, accentColor:'#3fc7ba', cursor:'pointer' }} />
-              <button onClick={() => setZoom(z => Math.min(200, z+10))}
+              <button onClick={() => { if(window._designerApplyZoom) window._designerApplyZoom(zoom+10); else setZoom(z=>Math.min(200,z+10)); }}
                 style={{ background:'rgba(255,255,255,0.08)', border:'none', color:'#aaa',
                   borderRadius:4, width:20, height:20, cursor:'pointer', fontSize:14,
                   display:'flex', alignItems:'center', justifyContent:'center', lineHeight:1, flexShrink:0 }}>+</button>
@@ -2835,7 +2844,7 @@ function DesignerApp() {
                     type="range"
                     min={100} max={200}
                     value={Math.round(zoom)}
-                    onChange={e => setZoom(+e.target.value)}
+                    onChange={e => { if(window._designerApplyZoom) window._designerApplyZoom(+e.target.value); else setZoom(+e.target.value); }}
                     style={{ flex: 1, accentColor: '#3fc7ba', cursor: 'pointer', height: 4 }}
                   />
                   {/* Bottone + */}
