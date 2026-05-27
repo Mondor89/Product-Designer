@@ -2175,35 +2175,22 @@ function DesignerApp() {
       canvas.on('object:added', () => { DesignerHistory.save(canvas); checkBounds(); });
       canvas.on('object:removed', () => checkBounds());
 
-      // ── Zoom via Fabric zoomToPoint — oggetti sempre nitidi ────
-      // Canvas logico: 400×svgH. physScale = rapporto fisico/logico.
-      // zoomToPoint scala il viewport Fabric → testo/svg/clipart ridisegnati vettorialmente.
+      // ── Zoom via CSS transform:scale sullo stage ────────────────
+      // Fabric zoom rimane sempre 1 — nessun zoomToPoint.
+      // Lo zoom utente moltiplica il baseScale del fit schermo.
+      // Tutto scala insieme: prodotto, testo, icone, zona stampa.
       const canvasEl = canvas.getElement().parentElement;
 
-      // Centro zona stampa in coordinate LOGICHE (400px base)
-      // Viene usato come punto fisso dello zoom (come Lumise)
-      const _getZoneCenter = () => {
-        const z = window._designerZone || { left:135, top:115, width:130, height:160 };
-        return new fabric.Point(z.left + z.width/2, z.top + z.height/2);
-      };
-
-      // Applica zoom: pct 100=fit, 200=doppio
-      // zoomToPoint scala attorno al centro della zona stampa
+      // Applica zoom: setZoom(pct) aggiorna React state → re-render stage con scale(baseScale * pct/100)
       window._applyFabricZoom = (pct) => {
-        const c = window.DesignerCanvas;
-        if (!c) return;
         const clamped = Math.min(200, Math.max(100, Math.round(pct)));
-        const ratio = clamped / 100;
-        c.zoomToPoint(_getZoneCenter(), ratio);
         setZoom(clamped);
       };
 
-      // Rotella mouse → zoom Fabric
+      // Rotella mouse → zoom CSS
       const onWheel = (e) => {
         e.preventDefault();
-        const currentZoom = Math.round(canvas.getZoom() * 100);
-        const delta = e.deltaY > 0 ? -8 : 8;
-        window._applyFabricZoom(currentZoom + delta);
+        setZoom(z => Math.min(200, Math.max(100, z + (e.deltaY > 0 ? -8 : 8))));
       };
       canvasEl.addEventListener('wheel', onWheel, { passive: false });
 
@@ -2220,8 +2207,7 @@ function DesignerApp() {
         const dist = Math.sqrt(dx*dx + dy*dy);
         if (lastDist !== null) {
           const delta = (dist - lastDist) * 0.4;
-          const currentZoom = Math.round(canvas.getZoom() * 100);
-          window._applyFabricZoom(currentZoom + delta);
+          setZoom(z => Math.min(200, Math.max(100, z + delta)));
           showZoomBarTemp();
         }
         lastDist = dist;
@@ -2699,7 +2685,7 @@ function DesignerApp() {
               width:400, height:svgH,
               overflow:'hidden',
               display: product ? 'block' : 'none',
-              transform:`scale(${baseScale})`,
+              transform:`scale(${baseScale * zoom / 100})`,
               transformOrigin:'top center',
               transition:'transform 0.2s',
               marginTop: isMobile ? 4 : 0,
