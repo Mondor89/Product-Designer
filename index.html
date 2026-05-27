@@ -1986,14 +1986,11 @@ function DesignerApp() {
       // Gli eventi mouse arrivano in coordinate CSS (400px) ma Fabric
       // li aspetta in coordinate fisiche (1200px) — dobbiamo scalare
       // Fabric gestisce questo automaticamente se impostiamo calcOffset
-      canvas.calcOffset();
-
-      // Log debug dimensioni canvas
-      setTimeout(() => {
-        const el = canvas.getElement();
-        console.log('Canvas CSS:', el.style.width, el.style.height, 'BoundingRect:', JSON.stringify(el.getBoundingClientRect()));
-        console.log('Canvas fisico:', canvas.getWidth(), canvas.getHeight(), 'zoom:', canvas.getZoom());
-      }, 500);
+      // calcOffset dopo render CSS — aspetta che transform:scale sia applicato
+      // senza questo Fabric non mappa correttamente i click
+      setTimeout(() => { canvas.calcOffset(); }, 200);
+      // Richiama calcOffset anche quando la finestra cambia dimensione
+      window.addEventListener('resize', () => canvas.calcOffset());
 
       // Aumenta dimensione controlli per renderli visibili e cliccabili
       // a scala 3x le maniglie default (13px) diventano 4px visivi — troppo piccole
