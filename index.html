@@ -2221,9 +2221,13 @@ function DesignerApp() {
       // Funzione globale per creare clipRect per ogni oggetto
       window._designerZone = zone;
       window._makeClipRect = (z) => new fabric.Rect({
-        left: z.left, top: z.top,
-        width: z.width, height: z.height,
+        left: Math.round(z.left), top: Math.round(z.top),
+        width: Math.round(z.width), height: Math.round(z.height),
         absolutePositioned: true,
+        // Bordo netto: nessun fill/stroke visibile, solo maschera
+        fill: 'transparent',
+        strokeWidth: 0,
+        stroke: null,
       });
       // Applica clipPath a ogni nuovo oggetto aggiunto
       canvas.on('object:added', (e) => {
@@ -2686,6 +2690,8 @@ function DesignerApp() {
               overflow:'hidden',
               display: product ? 'block' : 'none',
               transform:`scale(${baseScale * zoom / 100})`,
+              willChange:'transform',
+              backfaceVisibility:'hidden',
               transformOrigin:`${((zone.left + zone.width/2) / 400 * 100).toFixed(1)}% ${((zone.top + zone.height/2) / svgH * 100).toFixed(1)}%`,
               transition:'transform 0.2s',
               marginTop: isMobile ? 4 : 0,
