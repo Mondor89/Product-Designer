@@ -2347,8 +2347,8 @@ function DesignerApp() {
           canvas.renderAll();
           const br = curvedObj.getBoundingRect(false, true);
           curvedObj.set({
-            left: cx - br.width  / 2,
-            top:  cy - br.height / 2,
+            left: cx - (br.width  / H) / 2,
+            top:  cy - (br.height / H) / 2,
           });
           curvedObj.setCoords();
           canvas.setActiveObject(curvedObj);
@@ -2401,11 +2401,12 @@ function DesignerApp() {
       // Dopo render corregge con dimensioni reali
       setTimeout(() => {
         canvas.renderAll();
+        // getBoundingRect restituisce coordinate fisiche (gia * zoom)
+        // per centrare in coordinate logiche dividiamo per H
         const br = obj.getBoundingRect(false, true);
-        console.log('DEBUG H=', H, 'cx=', cx, 'cy=', cy, 'br=', JSON.stringify(br), 'canvasW=', canvas.getWidth(), 'zoom=', canvas.getZoom());
         obj.set({
-          left: cx - br.width  / 2,
-          top:  cy - br.height / 2,
+          left: cx - (br.width  / H) / 2,
+          top:  cy - (br.height / H) / 2,
         });
         obj.setCoords();
         canvas.setActiveObject(obj);
