@@ -2402,6 +2402,7 @@ function DesignerApp() {
       setTimeout(() => {
         canvas.renderAll();
         const br = obj.getBoundingRect(false, true);
+        console.log('DEBUG H=', H, 'cx=', cx, 'cy=', cy, 'br=', JSON.stringify(br), 'canvasW=', canvas.getWidth(), 'zoom=', canvas.getZoom());
         obj.set({
           left: cx - br.width  / 2,
           top:  cy - br.height / 2,
