@@ -1903,22 +1903,21 @@ function DesignerApp() {
   const checkBounds = useCallback(() => {
     const c = window.DesignerCanvas;
     if (!c) return;
-    const z = zone;
+    const H = window._canvasHIRES || 1;
+    const z = { left: zone.left*H, top: zone.top*H, width: zone.width*H, height: zone.height*H };
     let outside = false;
     const imgWarns = [];
     const imgCfg = AdminStore.get('imageSettings');
-    const tol = 8; // tolleranza pixel per bordi
+    const tol = 8 * H;
     c.getObjects().forEach(obj => {
       let br;
       if (obj.type === 'curved-text') {
-        // CurvedText: bounding box include tutto il cerchio
-        // Usa solo il centro dell'oggetto per capire se è nella zona
         const cx = obj.left + (obj.width  || 0) / 2;
         const cy = obj.top  + (obj.height || 0) / 2;
         const inZone = cx >= z.left && cx <= z.left + z.width &&
                        cy >= z.top  && cy <= z.top  + z.height;
         if (!inZone) outside = true;
-        return; // salta il check normale per curved-text
+        return;
       }
       br = obj.getBoundingRect(false, true);
       if (br.left < z.left - tol || br.top < z.top - tol ||
@@ -2211,11 +2210,12 @@ function DesignerApp() {
       // Questo taglia tutto quello che Fabric disegna (oggetti + maniglie)
       // ai bordi della zona stampa. E la soluzione piu semplice e affidabile.
       window._designerZone = zone;
+      // clipPath in coordinate fisiche (HIRES)
       const globalClip = new fabric.Rect({
-        left: zone.left,
-        top: zone.top,
-        width: zone.width,
-        height: zone.height,
+        left:   zone.left   * HIRES,
+        top:    zone.top    * HIRES,
+        width:  zone.width  * HIRES,
+        height: zone.height * HIRES,
         absolutePositioned: true,
       });
       canvas.clipPath = globalClip;
@@ -2291,8 +2291,13 @@ function DesignerApp() {
   const addElement = useCallback((el) => {
     const canvas = window.DesignerCanvas;
     if (!canvas) return;
-    const cx = zone.left + zone.width / 2;
-    const cy = zone.top + zone.height / 2;
+    // Con canvas fisico 3x, le coordinate logiche vanno moltiplicate per HIRES
+    // es. zona centrata a 200,237 → Fabric interno a 600,711
+    const H = window._canvasHIRES || 1;
+    const cx = (zone.left + zone.width  / 2) * H;
+    const cy = (zone.top  + zone.height / 2) * H;
+    const zw = zone.width  * H;
+    const zh = zone.height * H;
 
     if (el.type === 'text') {
       const placeholderText = 'Scrivi qui...';
@@ -2301,15 +2306,15 @@ function DesignerApp() {
       // Effetto curvo REALE — usa la classe CurvedText custom
       if (el.effect === 'curved') {
         // CurvedText: raggio ridotto per stare nella zona stampa 130px
-        const crvRadius = 45;
-        const crvLeft = cx - crvRadius - 10;
-        const crvTop  = cy - crvRadius - 10;
+        const crvRadius = 45 * H;
+        const crvLeft = cx - crvRadius - 10 * H;
+        const crvTop  = cy - crvRadius - 10 * H;
 
         const curvedObj = new fabric.CurvedText({
           left: crvLeft, top: crvTop,
           // NO originX/Y:center — usiamo top-left esplicito
           text: el.placeholder ? placeholderText : (el.text || 'Testo Curvo'),
-          fontSize: Math.min(24, el.size || 24), // più piccolo per stare nella curva
+          fontSize: Math.min(24 * H, (el.size || 24) * H),
           fontFamily: el.font || 'Arial',
           fill: el.placeholder ? 'rgba(150,150,150,0.5)' : (el.color || '#000000'),
           fontWeight: el.bold ? 'bold' : 'normal',
@@ -2361,7 +2366,7 @@ function DesignerApp() {
       // Stima: ogni carattere occupa circa fontSize*0.6 px di larghezza
       // vogliamo che il testo stia nella zona stampa (zone.width)
       // fontSize = zone.width / (txtLen * 0.6) ma non più di 48
-      const autoSize = Math.min(48, Math.max(16, Math.floor(zone.width / (txtLen * 0.65))));
+      const autoSize = Math.min(48 * H, Math.max(16 * H, Math.floor(zw / (txtLen * 0.65))));
       const obj = new fabric.IText(el.placeholder ? placeholderText : (el.text || 'Testo'), {
         left: 0, top: 0,
         fontFamily: el.font || 'Arial', fontSize: autoSize,
@@ -2385,7 +2390,7 @@ function DesignerApp() {
       // left/top in Fabric senza originX/Y = angolo top-left dell'oggetto
       // Stima altezza testo: fontSize * 1.2 (line-height)
       const estH = autoSize * 1.2;
-      const estW = Math.min(autoSize * txt.length * 0.6, zone.width - 10);
+      const estW = Math.min(autoSize * txt.length * 0.6, zw - 10 * H);
       obj.set({
         left: cx - estW / 2,
         top:  cy - estH / 2,
@@ -2410,7 +2415,7 @@ function DesignerApp() {
 
     } else if (el.type === 'image') {
       fabric.Image.fromURL(el.src, (img) => {
-        const s = Math.min((zone.width - 10) / img.width, (zone.height - 10) / img.height, 1);
+        const s = Math.min((zw - 10 * H) / img.width, (zh - 10 * H) / img.height, 1);
         img.set({ left: cx, top: cy, originX: 'center', originY: 'center', scaleX: s, scaleY: s });
         img._originalW = img.width;
         img._originalH = img.height;
@@ -2424,7 +2429,7 @@ function DesignerApp() {
       const svgStr = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">${el.svg}</svg>`;
       fabric.loadSVGFromString(svgStr, (objects, options) => {
         const group = fabric.util.groupSVGElements(objects, options);
-        const s = 80 / Math.max(group.width || 24, group.height || 24);
+        const s = (80 * H) / Math.max(group.width || 24, group.height || 24);
         group.set({ left: cx, top: cy, originX: 'center', originY: 'center', scaleX: s, scaleY: s });
         canvas.add(group);canvas.setActiveObject(group);canvas.renderAll();
       });
@@ -2433,19 +2438,19 @@ function DesignerApp() {
       const opts = { left: cx, top: cy, originX: 'center', originY: 'center',
         fill: el.fill || '#3fc7ba', stroke: el.stroke || 'transparent', strokeWidth: el.strokeWidth || 0 };
       let obj;
-      if (el.shape === 'rect') obj = new fabric.Rect({ ...opts, width: 100, height: 70 });else
-      if (el.shape === 'rounded-rect') obj = new fabric.Rect({ ...opts, width: 100, height: 70, rx: 12, ry: 12 });else
-      if (el.shape === 'circle') obj = new fabric.Circle({ ...opts, radius: 45 });else
-      if (el.shape === 'triangle') obj = new fabric.Triangle({ ...opts, width: 90, height: 80 });else
-      if (el.shape === 'line') obj = new fabric.Line([0, 0, 120, 0], { ...opts, stroke: el.fill || '#3fc7ba', strokeWidth: Math.max(el.strokeWidth || 3, 3) });
+      if (el.shape === 'rect') obj = new fabric.Rect({ ...opts, width: 100*H, height: 70*H });else
+      if (el.shape === 'rounded-rect') obj = new fabric.Rect({ ...opts, width: 100*H, height: 70*H, rx: 12*H, ry: 12*H });else
+      if (el.shape === 'circle') obj = new fabric.Circle({ ...opts, radius: 45*H });else
+      if (el.shape === 'triangle') obj = new fabric.Triangle({ ...opts, width: 90*H, height: 80*H });else
+      if (el.shape === 'line') obj = new fabric.Line([0, 0, 120*H, 0], { ...opts, stroke: el.fill || '#3fc7ba', strokeWidth: Math.max((el.strokeWidth || 3)*H, 3*H) });
       if (obj) {canvas.add(obj);canvas.setActiveObject(obj);}
 
     } else if (el.type === 'template') {
       const t = el.template;
       t.texts.forEach((txt, i) => {
         canvas.add(new fabric.IText(txt, {
-          left: cx, top: cy + i * 40 - 20, originX: 'center', originY: 'center',
-          fontFamily: 'Impact', fontSize: i === 0 ? 32 : 20, fill: t.colors[i % t.colors.length],
+          left: cx, top: cy + i * 40*H - 20*H, originX: 'center', originY: 'center',
+          fontFamily: 'Impact', fontSize: i === 0 ? 32*H : 20*H, fill: t.colors[i % t.colors.length],
           fontWeight: 'bold', textAlign: 'center'
         }));
       });
