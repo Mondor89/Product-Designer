@@ -250,7 +250,7 @@ const STYLE_PROMPTS = {
 function ProdottoPanel({ products, currentProduct, onProductChange, selectedColor, onColorChange }) {
   const [quantities, setQuantities] = useSt(() => Object.fromEntries(['XS','S','M','L','XL','XXL','XXXL'].map(s => [s, 0])));
   const prod = products.find(p => p.id === currentProduct) || products[0];
-  const SIZES = prod?.taglie?.length ? prod.taglie : ['XS','S','M','L','XL','XXL'];
+  const SIZES = (prod?.sizes?.length ? prod.sizes : (prod?.taglie?.length ? prod.taglie : ['XS','S','M','L','XL','XXL']));
 
   const setQty = (size, val) => setQuantities(q => ({ ...q, [size]: Math.max(0, Math.min(999, parseInt(val) || 0)) }));
   const adj = (s, d) => setQty(s, quantities[s] + d);

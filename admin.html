@@ -1550,7 +1550,14 @@ function OrdersPage({ toast }) {
 function SettingsPage({ toast }) {
   const [s, setS] = useState(() => AdminStore.get('settings') || {});
   const upd = (k,v) => setS(x=>({...x,[k]:v}));
-  const saveSettings = () => { AdminStore.set('settings', s); toast.show('Impostazioni salvate!'); };
+  const saveSettings = () => {
+    AdminStore.set('settings', s);
+    // Sync AI config nel formato atteso dal designer
+    AdminStore.set('aiConfig', { service: s.aiService || 'pollinations', apiKey: s.aiKey || '' });
+    // Sync image settings nel formato atteso dal designer
+    AdminStore.set('imageSettings', { maxMB: s.maxUploadMB || 5, minKB: 10, degradeWarnScale: 2.5 });
+    toast.show('Impostazioni salvate!');
+  };
 
   const resetAll = () => {
     if (!confirm('ATTENZIONE: questo elimina tutti i dati (prodotti, clipart, template, font, ordini). Procedere?')) return;
