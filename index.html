@@ -1981,6 +1981,27 @@ function DesignerApp() {
         el.style.height = svgH + 'px';
       }
 
+      // ── Compensazione HIRES per click e controlli ───────────────
+      // Con setZoom(3) il canvas fisico e 3x ma CSS lo comprime a 400px
+      // Gli eventi mouse arrivano in coordinate CSS (400px) ma Fabric
+      // li aspetta in coordinate fisiche (1200px) — dobbiamo scalare
+      // Fabric gestisce questo automaticamente se impostiamo calcOffset
+      canvas.calcOffset();
+
+      // Log debug dimensioni canvas
+      setTimeout(() => {
+        const el = canvas.getElement();
+        console.log('Canvas CSS:', el.style.width, el.style.height, 'BoundingRect:', JSON.stringify(el.getBoundingClientRect()));
+        console.log('Canvas fisico:', canvas.getWidth(), canvas.getHeight(), 'zoom:', canvas.getZoom());
+      }, 500);
+
+      // Aumenta dimensione controlli per renderli visibili e cliccabili
+      // a scala 3x le maniglie default (13px) diventano 4px visivi — troppo piccole
+      fabric.Object.prototype.cornerSize = 13 * HIRES;
+      fabric.Object.prototype.touchCornerSize = 24 * HIRES;
+      fabric.Object.prototype.borderScaleFactor = HIRES;
+      fabric.Object.prototype.padding = 4 * HIRES;
+
       // ── Nascondi TUTTI i controlli default Fabric ─────────────
       // Teniamo solo i nostri 4 angoli custom
       fabric.Object.prototype.setControlsVisibility({
