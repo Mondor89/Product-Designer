@@ -501,6 +501,7 @@ const NAV = [
   { id:'templates',   label:'Template',     icon:'fa-layer-group' },
   { id:'fonts',       label:'Font',         icon:'fa-font' },
   { id:'categories',  label:'Categorie',    icon:'fa-tags' },
+  { id:'assets_lumise', label:'Assets Lumise', icon:'fa-archive' },
   { section: 'Configurazione' },
   { id:'settings',    label:'Impostazioni', icon:'fa-sliders-h' },
 ];
@@ -1696,6 +1697,171 @@ function SettingsPage({ toast }) {
   );
 }
 
+// ── Assets Lumise Page ──────────────────────────────────────────────
+function AssetsLumisePage({ toast }) {
+  const [index, setIndex]     = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError]     = useState('');
+  const [tab, setTab]         = useState('cliparts'); // 'cliparts' | 'templates'
+  const [catFilter, setCat]   = useState('all');
+  const [search, setSearch]   = useState('');
+  const [page, setPage]       = useState(0);
+  const PAGE_SIZE = 120;
+
+  useEffect(() => {
+    fetch('assets/index.json')
+      .then(r => { if (!r.ok) throw new Error('File non trovato'); return r.json(); })
+      .then(data => { setIndex(data); setLoading(false); })
+      .catch(e => { setError(e.message); setLoading(false); });
+  }, []);
+
+  // reset pagina quando cambiano filtri
+  useEffect(() => { setPage(0); }, [tab, catFilter, search]);
+
+  if (loading) return <div style={{padding:40,textAlign:'center'}}><i className="fa fa-spinner fa-spin" style={{fontSize:32,color:'#3949ab'}}/><p style={{marginTop:16,color:'#888'}}>Caricamento assets...</p></div>;
+  if (error)   return <div style={{padding:40,textAlign:'center',color:'#e53935'}}><i className="fa fa-exclamation-triangle" style={{fontSize:32}}/><p style={{marginTop:16}}>Errore: {error}<br/><small>Assicurati che assets/index.json sia presente nella stessa cartella dell'admin.</small></p></div>;
+
+  const cliparts  = index?.cliparts?.files  || [];
+  const templates = index?.templates?.files || [];
+  const clipCats  = [{ id:'all', name:'Tutte' }, ...(index?.cliparts?.categories || [])];
+
+  const filteredCliparts = cliparts.filter(c => {
+    const matchCat  = catFilter === 'all' || c.cat === catFilter;
+    const matchName = !search || c.name.toLowerCase().includes(search.toLowerCase());
+    return matchCat && matchName;
+  });
+  const filteredTemplates = templates.filter(t =>
+    !search || t.name.toLowerCase().includes(search.toLowerCase())
+  );
+
+  const activeList = tab === 'cliparts' ? filteredCliparts : filteredTemplates;
+  const totalPages = Math.ceil(activeList.length / PAGE_SIZE);
+  const visible    = activeList.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE);
+
+  return (
+    <div>
+      <div className="page-header">
+        <div>
+          <div className="page-title">Assets Lumise</div>
+          <div className="page-subtitle">{cliparts.length} clipart · {templates.length} template estratti dal backup WonderSpit</div>
+        </div>
+      </div>
+
+      {/* Statistiche */}
+      <div className="stats-row" style={{marginBottom:20}}>
+        {[
+          {label:'Clipart SVG',  value:cliparts.length,  icon:'fa-shapes',      color:'#1e88e5'},
+          {label:'Template',     value:templates.length,  icon:'fa-layer-group', color:'#7460ee'},
+          {label:'Categorie',    value:(index?.cliparts?.categories||[]).length, icon:'fa-tags', color:'#43a047'},
+          {label:'Thumbnails',   value:(index?.thumbnails||[]).length, icon:'fa-image', color:'#f57c00'},
+        ].map(s => (
+          <div key={s.label} className="stat-box">
+            <div className="stat-icon" style={{background:s.color}}><i className={`fa ${s.icon}`}/></div>
+            <div><div className="stat-value">{s.value}</div><div className="stat-label">{s.label}</div></div>
+          </div>
+        ))}
+      </div>
+
+      {/* Tab switcher */}
+      <div style={{display:'flex',gap:8,marginBottom:16}}>
+        {[['cliparts','fa-shapes','Clipart'],['templates','fa-layer-group','Template']].map(([id,icon,lbl]) => (
+          <button key={id} onClick={()=>setTab(id)}
+            style={{padding:'8px 20px',borderRadius:8,border:'none',cursor:'pointer',fontWeight:600,fontSize:13,
+              background: tab===id ? '#3949ab' : '#e8eaf6',
+              color:       tab===id ? '#fff'    : '#3949ab',
+              transition:'all .15s'}}>
+            <i className={`fa ${icon}`} style={{marginRight:6}}/>{lbl}
+            <span style={{marginLeft:8,background:'rgba(255,255,255,.25)',borderRadius:20,padding:'1px 8px',fontSize:11}}>
+              {id==='cliparts' ? cliparts.length : templates.length}
+            </span>
+          </button>
+        ))}
+      </div>
+
+      <div className="card">
+        <div className="card-header" style={{justifyContent:'space-between',flexWrap:'wrap',gap:10}}>
+          {/* Filtro categorie (solo clipart) */}
+          <div style={{display:'flex',gap:6,flexWrap:'wrap'}}>
+            {tab==='cliparts' && clipCats.map(c => (
+              <button key={c.id} onClick={()=>setCat(c.id)}
+                style={{padding:'4px 14px',borderRadius:20,border:'none',cursor:'pointer',fontSize:12,fontWeight:600,
+                  background: catFilter===c.id ? '#3949ab' : '#e8eaf6',
+                  color:       catFilter===c.id ? '#fff'    : '#555'}}>
+                {c.name}
+              </button>
+            ))}
+          </div>
+          <input type="text" placeholder="Cerca per nome..." value={search}
+            onChange={e=>setSearch(e.target.value)}
+            style={{border:'1.5px solid #e0e0e0',borderRadius:7,padding:'5px 12px',fontSize:13,outline:'none',width:200}}/>
+        </div>
+        <div className="card-body">
+          <div style={{color:'#888',fontSize:12,marginBottom:12}}>
+            {activeList.length} risultati · pagina {page+1}/{totalPages||1}
+          </div>
+
+          {tab === 'cliparts' ? (
+            <div className="thumb-grid">
+              {visible.map(c => (
+                <div key={c.path} className="thumb-item" style={{cursor:'default'}}>
+                  <div className="thumb-img">
+                    {c.thumb
+                      ? <img src={c.thumb} alt={c.name}
+                          style={{width:'100%',height:'100%',objectFit:'contain',borderRadius:6}}
+                          onError={e=>{e.target.style.display='none'; e.target.nextSibling.style.display='block';}}/>
+                      : null}
+                    <span style={{display:'none',fontSize:28}}>🎨</span>
+                  </div>
+                  <div className="thumb-label" title={c.name}>{c.name}</div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(200px,1fr))',gap:10}}>
+              {visible.map(t => (
+                <div key={t.path} style={{background:'#f5f5f5',borderRadius:8,padding:'10px 14px',
+                  border:'1.5px solid #e0e0e0',display:'flex',alignItems:'center',gap:10}}>
+                  <i className="fa fa-file-alt" style={{color:'#7460ee',fontSize:20,flexShrink:0}}/>
+                  <div>
+                    <div style={{fontWeight:600,fontSize:13,color:'#333'}}>{t.name}</div>
+                    <div style={{fontSize:11,color:'#888'}}>{t.path.split('/').slice(-3,-1).join('/')}</div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* Paginazione */}
+          {totalPages > 1 && (
+            <div style={{display:'flex',gap:8,justifyContent:'center',marginTop:20,flexWrap:'wrap'}}>
+              <button onClick={()=>setPage(p=>Math.max(0,p-1))} disabled={page===0}
+                style={{padding:'6px 16px',borderRadius:7,border:'1.5px solid #e0e0e0',cursor:page===0?'default':'pointer',
+                  background:page===0?'#f5f5f5':'#fff',color:page===0?'#bbb':'#333'}}>
+                ‹ Prec
+              </button>
+              {Array.from({length:Math.min(7,totalPages)},(_,i)=>{
+                const p = totalPages<=7 ? i : Math.max(0,Math.min(totalPages-7,page-3))+i;
+                return (
+                  <button key={p} onClick={()=>setPage(p)}
+                    style={{padding:'6px 12px',borderRadius:7,border:'1.5px solid #e0e0e0',cursor:'pointer',
+                      background:page===p?'#3949ab':'#fff',color:page===p?'#fff':'#333',fontWeight:page===p?700:400}}>
+                    {p+1}
+                  </button>
+                );
+              })}
+              <button onClick={()=>setPage(p=>Math.min(totalPages-1,p+1))} disabled={page>=totalPages-1}
+                style={{padding:'6px 16px',borderRadius:7,border:'1.5px solid #e0e0e0',cursor:page>=totalPages-1?'default':'pointer',
+                  background:page>=totalPages-1?'#f5f5f5':'#fff',color:page>=totalPages-1?'#bbb':'#333'}}>
+                Succ ›
+              </button>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ── App Root ────────────────────────────────────────────────────────
 function App() {
   const [logged, setLogged] = useState(() => sessionStorage.getItem('ws_admin_auth') === '1');
@@ -1710,7 +1876,7 @@ function App() {
   const PAGE_TITLES = {
     dashboard:'Dashboard', orders:'Ordini', products:'Prodotti',
     cliparts:'Clipart', templates:'Template', fonts:'Font',
-    categories:'Categorie', settings:'Impostazioni',
+    categories:'Categorie', assets_lumise:'Assets Lumise', settings:'Impostazioni',
   };
 
   const renderPage = () => {
@@ -1721,8 +1887,9 @@ function App() {
       case 'cliparts':   return <ClipartsPage toast={toast}/>;
       case 'templates':  return <TemplatesPage toast={toast}/>;
       case 'fonts':      return <FontsPage toast={toast}/>;
-      case 'categories': return <CategoriesPage toast={toast}/>;
-      case 'settings':   return <SettingsPage toast={toast}/>;
+      case 'categories':    return <CategoriesPage toast={toast}/>;
+      case 'assets_lumise': return <AssetsLumisePage toast={toast}/>;
+      case 'settings':      return <SettingsPage toast={toast}/>;
       default:           return <Dashboard setPage={setPage}/>;
     }
   };
