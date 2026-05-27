@@ -1700,13 +1700,12 @@ function useBreakpoint() {
   return bp;
 }
 
-// ─── Hook dimensione fisica canvas ──────────────────────────────
-// Calcola la dimensione reale in px del canvas (nessun CSS scale).
-// Il canvas viene inizializzato direttamente a questa dimensione.
-// Zoom utente → canvas.zoomToPoint() Fabric, mai transform:scale.
-function useCanvasPhysicalSize(bp, svgH) {
-  const [physW, setPhysW] = React.useState(400);
-  const [physH, setPhysH] = React.useState(svgH || 475);
+// ─── Hook baseScale per fit schermo ─────────────────────────────
+// Calcola quanto scalare il canvas 400px per fittare nel viewport.
+// transform:scale sullo stage → fit schermo (non sfoca perché è solo scala visiva).
+// Zoom utente → canvas.zoomToPoint() Fabric → sempre nitido.
+function useCanvasPhysicalSize(bp) {
+  const [baseScale, setBaseScale] = React.useState(1);
   React.useEffect(() => {
     const calc = () => {
       const leftW = bp === 'mobile' ? 0 : 72;
@@ -1714,19 +1713,14 @@ function useCanvasPhysicalSize(bp, svgH) {
       const botH  = bp === 'mobile' ? 120 : 60;
       const avW = window.innerWidth  - leftW - 32;
       const avH = window.innerHeight - topH - botH;
-      // Scala proporzionale: canvas logico 400×svgH → fit nello spazio disponibile
-      const scaleByW = avW / 400;
-      const scaleByH = avH / (svgH || 475);
-      const s = Math.min(scaleByW, scaleByH, 1.0); // mai più grande del 100%
-      const clamped = Math.max(0.3, s);
-      setPhysW(Math.round(400 * clamped));
-      setPhysH(Math.round((svgH || 475) * clamped));
+      const s = Math.min(avW / 400, avH / 475, 1.0);
+      setBaseScale(Math.max(0.3, s));
     };
     calc();
     window.addEventListener('resize', calc);
     return () => window.removeEventListener('resize', calc);
-  }, [bp, svgH]);
-  return { physW, physH };
+  }, [bp]);
+  return { baseScale };
 }
 
 // ─── MobileToolDrawer — pannello strumenti che sale dal basso ──
@@ -2279,23 +2273,7 @@ function DesignerApp() {
     };
   }, []);
 
-  // ── Resize: aggiorna CSS canvas quando physW/physH cambiano ──
-  // Le dimensioni logiche Fabric restano 400×svgH — solo la visualizzazione cambia
-  useEffect(() => {
-    const c = window.DesignerCanvas;
-    if (!c) return;
-    const el = c.getElement();
-    if (el) {
-      el.style.width  = physW + 'px';
-      el.style.height = physH + 'px';
-    }
-    const mockupEl = document.getElementById('ws-mockup-img');
-    if (mockupEl) {
-      mockupEl.style.width  = physW + 'px';
-      mockupEl.style.height = physH + 'px';
-    }
-    c.renderAll();
-  }, [physW, physH]);
+  // Nessun resize canvas necessario — transform:scale gestisce il fit
 
   // Save/restore per side
   const switchSide = (newProduct, newSide) => {
@@ -2576,10 +2554,9 @@ function DesignerApp() {
   // hoodie: 670x893px → scala 400/670 → 533px
   const svgH = product === 'hoodie' ? 533 : product === 'longsleeve' ? 500 : 475;
 
-  // Dimensione fisica canvas — nessun CSS scale, canvas reale in px
-  const { physW, physH } = useCanvasPhysicalSize(bp, svgH);
-  // Rapporto logico(400px) → fisico: usato per scalare zona stampa e mockup img
-  const physScale = physW / 400;
+  // baseScale per fit schermo — canvas 400px scalato via transform:scale
+  // Zoom utente → canvas.zoomToPoint() Fabric → nitido
+  const { baseScale } = useCanvasPhysicalSize(bp);
 
   return (
     <div style={{ display:'flex', flexDirection:'column', height:'100vh', overflow:'hidden' }}>
@@ -2716,12 +2693,15 @@ function DesignerApp() {
             </div>
           )}
 
-          {/* Stage canvas — 400px logici, CSS lo scala visivamente senza transform:scale */}
+          {/* Stage canvas — transform:scale per fit schermo, zoom via Fabric zoomToPoint */}
           <div className="canvas-stage"
             style={{ position:'relative',
-              width: physW, height: physH,
+              width:400, height:svgH,
               overflow:'hidden',
               display: product ? 'block' : 'none',
+              transform:`scale(${baseScale})`,
+              transformOrigin:'top center',
+              transition:'transform 0.2s',
               marginTop: isMobile ? 4 : 0,
               flexShrink: 0,
               borderRadius:4,
@@ -2729,27 +2709,25 @@ function DesignerApp() {
 
             {/* Sfondo grigio Lumise */}
             <div style={{
-              position:'absolute', top:0, left:0, width:'100%', height:'100%',
+              position:'absolute', top:0, left:0, width:400, height:svgH,
               background:'#ebeced',
               boxShadow:'0 2px 16px rgba(0,0,0,0.10)',
               borderRadius:4,
               zIndex:1, pointerEvents:'none',
             }} />
 
-            {/* Mockup colorato — img HTML fuori da Fabric */}
+            {/* Mockup colorato — img HTML fuori da Fabric, mai sfocato */}
             <img id="ws-mockup-img"
               style={{ position:'absolute', top:0, left:0,
-                width: physW, height: physH,
+                width:400, height:svgH,
                 zIndex:2, pointerEvents:'none',
                 display:'block',
               }} />
 
-            {/* Zona stampa tratteggiata — scalata con physScale */}
+            {/* Zona stampa tratteggiata — coordinate logiche 400px */}
             <div id="print-zone-outline" style={{ position:'absolute',
-              top:  Math.round(zone.top   * physScale),
-              left: Math.round(zone.left  * physScale),
-              width: Math.round(zone.width  * physScale),
-              height:Math.round(zone.height * physScale),
+              top:zone.top, left:zone.left,
+              width:zone.width, height:zone.height,
               border:'1.5px dashed rgba(63,199,186,0.55)',
               borderRadius:4, zIndex:4, pointerEvents:'none',
               background:'rgba(63,199,186,0.03)',
@@ -2760,10 +2738,9 @@ function DesignerApp() {
               </div>
             </div>
 
-            {/* Fabric canvas — 400×svgH logici, CSS lo ridimensiona a physW×physH */}
+            {/* Fabric canvas — 400×svgH, zoom utente via zoomToPoint (vettoriale, nitido) */}
             <canvas id="main-canvas" style={{
-              position:'absolute', top:0, left:0, zIndex:3, background:'transparent',
-              width: physW + 'px', height: physH + 'px',
+              position:'absolute', top:0, left:0, zIndex:3, width:400, height:svgH, background:'transparent',
             }} />
 
           </div>{/* fine canvas-stage */}
