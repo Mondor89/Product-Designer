@@ -1,0 +1,1750 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>WonderSpit – Admin Panel</title>
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" crossorigin="anonymous"></script>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: 'Inter', sans-serif; background: #f0f2f5; color: #2d3142; overflow: hidden; height: 100vh; }
+button, input, select, textarea { font-family: 'Inter', sans-serif; }
+::-webkit-scrollbar { width: 5px; height: 5px; }
+::-webkit-scrollbar-thumb { background: #ccc; border-radius: 3px; }
+
+/* ── Layout ─────────────────────────────────────────────── */
+#admin-root { height: 100vh; display: flex; flex-direction: column; }
+.admin-wrap { display: flex; flex: 1; overflow: hidden; }
+
+/* ── Login ──────────────────────────────────────────────── */
+.login-page {
+  display: flex; align-items: center; justify-content: center;
+  height: 100vh; background: #1a237e;
+}
+.login-card {
+  background: #fff; border-radius: 12px; padding: 40px 48px;
+  width: 380px; box-shadow: 0 8px 40px rgba(0,0,0,.3); text-align: center;
+}
+.login-card h1 { font-size: 22px; font-weight: 700; color: #1a237e; margin-bottom: 6px; }
+.login-card p { color: #888; font-size: 13px; margin-bottom: 28px; }
+.login-card input {
+  width: 100%; border: 1.5px solid #ddd; border-radius: 8px;
+  padding: 11px 14px; font-size: 14px; outline: none; margin-bottom: 14px;
+  transition: border-color .2s;
+}
+.login-card input:focus { border-color: #3949ab; }
+.login-card .err { color: #e53935; font-size: 12px; margin-bottom: 10px; }
+.login-btn {
+  width: 100%; background: #1a237e; color: #fff; border: none;
+  border-radius: 8px; padding: 12px; font-size: 15px; font-weight: 600;
+  cursor: pointer; transition: background .2s;
+}
+.login-btn:hover { background: #283593; }
+
+/* ── Sidebar ─────────────────────────────────────────────── */
+.sidebar {
+  width: 240px; background: #1a237e; flex-shrink: 0;
+  display: flex; flex-direction: column; overflow-y: auto;
+  overflow-x: hidden;
+}
+.sidebar-logo {
+  padding: 22px 20px 18px; border-bottom: 1px solid rgba(255,255,255,.1);
+  display: flex; align-items: center; gap: 10px;
+}
+.sidebar-logo-icon {
+  width: 36px; height: 36px; background: #3fc7ba; border-radius: 8px;
+  display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+}
+.sidebar-logo-icon i { color: #fff; font-size: 16px; }
+.sidebar-logo-text { color: #fff; font-size: 15px; font-weight: 700; }
+.sidebar-logo-sub { color: rgba(255,255,255,.5); font-size: 11px; }
+.sidebar-nav { flex: 1; padding: 12px 0; }
+.sidebar-section { color: rgba(255,255,255,.4); font-size: 10px; font-weight: 600;
+  text-transform: uppercase; letter-spacing: .8px; padding: 14px 20px 6px; }
+.nav-item {
+  display: flex; align-items: center; gap: 11px;
+  padding: 10px 20px; cursor: pointer; color: rgba(255,255,255,.75);
+  font-size: 13.5px; font-weight: 500; transition: all .15s;
+  border-left: 3px solid transparent; user-select: none;
+}
+.nav-item:hover { background: rgba(255,255,255,.07); color: #fff; }
+.nav-item.active {
+  background: rgba(255,255,255,.12); color: #fff;
+  border-left-color: #3fc7ba;
+}
+.nav-item i { width: 18px; text-align: center; font-size: 14px; }
+.sidebar-footer {
+  padding: 16px 20px; border-top: 1px solid rgba(255,255,255,.1);
+}
+.logout-btn {
+  display: flex; align-items: center; gap: 10px; color: rgba(255,255,255,.6);
+  font-size: 13px; cursor: pointer; transition: color .15s; background: none;
+  border: none; padding: 0;
+}
+.logout-btn:hover { color: #fff; }
+
+/* ── Top bar ─────────────────────────────────────────────── */
+.topbar {
+  background: #fff; padding: 0 28px; height: 58px; display: flex;
+  align-items: center; justify-content: space-between;
+  border-bottom: 1px solid #e8eaf0; flex-shrink: 0;
+}
+.topbar-title { font-size: 17px; font-weight: 700; color: #1a237e; }
+.topbar-right { display: flex; align-items: center; gap: 14px; }
+.topbar-badge {
+  background: #e8f5e9; color: #2e7d32; font-size: 11px;
+  padding: 3px 10px; border-radius: 20px; font-weight: 600;
+}
+.view-site-btn {
+  background: #1a237e; color: #fff; border: none; border-radius: 7px;
+  padding: 7px 14px; font-size: 12px; font-weight: 600; cursor: pointer;
+  transition: background .2s; text-decoration: none; display: flex; align-items: center; gap: 6px;
+}
+.view-site-btn:hover { background: #283593; }
+
+/* ── Content area ───────────────────────────────────────── */
+.admin-content {
+  flex: 1; overflow-y: auto; padding: 24px 28px;
+  display: flex; flex-direction: column; gap: 0;
+}
+.right-panel { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
+
+/* ── Page header ────────────────────────────────────────── */
+.page-header {
+  display: flex; align-items: center; justify-content: space-between;
+  margin-bottom: 22px;
+}
+.page-title { font-size: 20px; font-weight: 700; color: #1a237e; }
+.page-subtitle { font-size: 13px; color: #888; margin-top: 2px; }
+
+/* ── Primary button ─────────────────────────────────────── */
+.btn-primary {
+  background: #1a237e; color: #fff; border: none; border-radius: 7px;
+  padding: 9px 18px; font-size: 13px; font-weight: 600; cursor: pointer;
+  transition: background .2s; display: flex; align-items: center; gap: 7px;
+}
+.btn-primary:hover { background: #283593; }
+.btn-danger {
+  background: #e53935; color: #fff; border: none; border-radius: 6px;
+  padding: 6px 12px; font-size: 12px; cursor: pointer; transition: background .2s;
+}
+.btn-danger:hover { background: #c62828; }
+.btn-secondary {
+  background: #fff; color: #1a237e; border: 1.5px solid #e0e0e0; border-radius: 7px;
+  padding: 8px 16px; font-size: 13px; font-weight: 500; cursor: pointer;
+  transition: all .15s;
+}
+.btn-secondary:hover { border-color: #1a237e; }
+.btn-sm {
+  padding: 5px 11px; font-size: 12px; border-radius: 6px;
+}
+.btn-edit {
+  background: #e3f2fd; color: #1565c0; border: none; border-radius: 6px;
+  padding: 5px 10px; font-size: 12px; cursor: pointer;
+}
+.btn-edit:hover { background: #bbdefb; }
+
+/* ── Cards / Boxes ──────────────────────────────────────── */
+.card {
+  background: #fff; border-radius: 10px; box-shadow: 0 1px 4px rgba(0,0,0,.07);
+  overflow: hidden;
+}
+.card-body { padding: 20px 24px; }
+.card-header {
+  padding: 14px 20px; border-bottom: 1px solid #f0f0f0;
+  font-size: 14px; font-weight: 600; color: #1a237e;
+  display: flex; align-items: center; gap: 8px;
+}
+
+/* ── Stat boxes ─────────────────────────────────────────── */
+.stats-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 18px; margin-bottom: 22px; }
+.stat-box {
+  background: #fff; border-radius: 10px; padding: 18px 20px;
+  box-shadow: 0 1px 4px rgba(0,0,0,.07);
+  display: flex; align-items: center; gap: 16px;
+}
+.stat-icon {
+  width: 46px; height: 46px; border-radius: 10px; display: flex;
+  align-items: center; justify-content: center; flex-shrink: 0;
+}
+.stat-icon i { color: #fff; font-size: 18px; }
+.stat-value { font-size: 26px; font-weight: 700; color: #1a237e; line-height: 1; }
+.stat-label { font-size: 12px; color: #888; margin-top: 3px; font-weight: 500; }
+
+/* ── Tables ─────────────────────────────────────────────── */
+.table-wrap { overflow-x: auto; }
+table.lumise-table {
+  width: 100%; border-collapse: collapse; font-size: 13px;
+}
+.lumise-table th {
+  background: #f5f7ff; color: #444; font-size: 11px; font-weight: 700;
+  text-transform: uppercase; letter-spacing: .5px; padding: 10px 14px;
+  border-bottom: 1.5px solid #e8eaf0; text-align: left;
+}
+.lumise-table td {
+  padding: 11px 14px; border-bottom: 1px solid #f0f0f0; color: #333;
+  vertical-align: middle;
+}
+.lumise-table tr:last-child td { border-bottom: none; }
+.lumise-table tr:hover td { background: #f9f9fb; }
+.no-data { color: #aaa; font-size: 13px; text-align: center; padding: 30px; }
+
+/* ── Badge/status ───────────────────────────────────────── */
+.status-badge {
+  display: inline-block; padding: 3px 10px; border-radius: 20px;
+  font-size: 11px; font-weight: 600;
+}
+.status-pending { background: #fff3e0; color: #e65100; }
+.status-completed { background: #e8f5e9; color: #2e7d32; }
+.status-processing { background: #e3f2fd; color: #1565c0; }
+
+/* ── Grid of thumbs ─────────────────────────────────────── */
+.thumb-grid {
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+  gap: 12px;
+}
+.thumb-item {
+  background: #f9f9fb; border: 1.5px solid #e8eaf0; border-radius: 8px;
+  overflow: hidden; position: relative; cursor: pointer; transition: border-color .15s;
+}
+.thumb-item:hover { border-color: #1a237e; }
+.thumb-item .thumb-img {
+  width: 100%; aspect-ratio: 1; display: flex; align-items: center; justify-content: center;
+  padding: 12px;
+}
+.thumb-item .thumb-img svg { width: 40px; height: 40px; }
+.thumb-item .thumb-img img { max-width: 100%; max-height: 70px; object-fit: contain; }
+.thumb-label {
+  padding: 6px 8px; font-size: 11px; text-align: center; color: #555;
+  font-weight: 500; border-top: 1px solid #f0f0f0; background: #fff;
+}
+.thumb-actions {
+  position: absolute; top: 4px; right: 4px; display: flex; gap: 4px;
+  opacity: 0; transition: opacity .15s;
+}
+.thumb-item:hover .thumb-actions { opacity: 1; }
+.thumb-action-btn {
+  width: 24px; height: 24px; border-radius: 4px; border: none; cursor: pointer;
+  display: flex; align-items: center; justify-content: center; font-size: 11px;
+}
+.thumb-del { background: #ffebee; color: #e53935; }
+.thumb-edit { background: #e3f2fd; color: #1565c0; }
+
+/* ── Forms ──────────────────────────────────────────────── */
+.form-wrap { max-width: 700px; }
+.form-group { margin-bottom: 18px; }
+.form-label { display: block; font-size: 12px; font-weight: 600; color: #555;
+  text-transform: uppercase; letter-spacing: .4px; margin-bottom: 6px; }
+.form-control {
+  width: 100%; border: 1.5px solid #e0e0e0; border-radius: 8px;
+  padding: 9px 12px; font-size: 13px; outline: none; transition: border-color .2s;
+  background: #fff;
+}
+.form-control:focus { border-color: #1a237e; }
+.form-control.textarea { min-height: 100px; resize: vertical; }
+.form-hint { font-size: 11px; color: #aaa; margin-top: 4px; }
+.form-row { display: grid; gap: 16px; grid-template-columns: 1fr 1fr; }
+.form-actions { display: flex; gap: 10px; margin-top: 24px; }
+.color-palette { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 6px; align-items: center; }
+.color-swatch {
+  width: 26px; height: 26px; border-radius: 50%; cursor: pointer;
+  border: 2px solid transparent; transition: border-color .15s; position: relative;
+  flex-shrink: 0;
+}
+.color-swatch.active { border-color: #333; }
+.color-swatch .del-color {
+  position: absolute; top: -4px; right: -4px; width: 14px; height: 14px;
+  background: #e53935; border-radius: 50%; color: #fff; font-size: 9px;
+  display: flex; align-items: center; justify-content: center; cursor: pointer;
+  opacity: 0; transition: opacity .15s;
+}
+.color-swatch:hover .del-color { opacity: 1; }
+.add-color-btn {
+  width: 26px; height: 26px; border-radius: 50%; border: 2px dashed #ccc;
+  background: none; cursor: pointer; font-size: 16px; color: #aaa;
+  display: flex; align-items: center; justify-content: center;
+}
+.add-color-btn:hover { border-color: #1a237e; color: #1a237e; }
+.tag-list { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 6px; }
+.tag {
+  background: #e8eaf6; color: #3949ab; padding: 3px 10px; border-radius: 20px;
+  font-size: 12px; display: flex; align-items: center; gap: 5px;
+}
+.tag button { background: none; border: none; cursor: pointer; color: #999;
+  font-size: 13px; padding: 0; line-height: 1; }
+.tag button:hover { color: #e53935; }
+.panel-tabs { display: flex; gap: 0; border-bottom: 1.5px solid #e8eaf0; margin-bottom: 20px; }
+.panel-tab {
+  padding: 9px 18px; font-size: 13px; font-weight: 500; color: #888;
+  cursor: pointer; border-bottom: 2.5px solid transparent; margin-bottom: -1.5px;
+  transition: color .15s;
+}
+.panel-tab.active { color: #1a237e; border-bottom-color: #1a237e; font-weight: 600; }
+.panel-tab:hover { color: #1a237e; }
+
+/* ── Color picker inline ─────────────────────────────────── */
+.color-input-row { display: flex; align-items: center; gap: 8px; }
+.color-preview { width: 28px; height: 28px; border-radius: 6px; border: 1px solid #e0e0e0; flex-shrink: 0; }
+.product-mockup-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.mockup-side-card {
+  border: 1.5px solid #e0e0e0; border-radius: 8px; padding: 12px;
+}
+.mockup-side-card h5 { font-size: 12px; color: #555; font-weight: 600; margin-bottom: 8px; }
+.print-zone-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.sizes-row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+.size-chip {
+  background: #e8eaf6; color: #3949ab; padding: 4px 12px; border-radius: 20px;
+  font-size: 12px; font-weight: 500; display: flex; align-items: center; gap: 5px;
+}
+.size-chip button { background: none; border: none; cursor: pointer; color: #999; padding: 0; font-size: 13px; }
+.size-chip button:hover { color: #e53935; }
+.font-preview {
+  padding: 6px 10px; background: #f5f5f5; border-radius: 6px; font-size: 16px; margin-top: 4px;
+}
+
+/* ── Dashboard grids ─────────────────────────────────────── */
+.dash-row { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; margin-bottom: 18px; }
+.dash-recent { display: flex; flex-direction: column; gap: 10px; }
+.recent-item {
+  display: flex; align-items: center; gap: 10px; padding: 8px 0;
+  border-bottom: 1px solid #f0f0f0;
+}
+.recent-item:last-child { border-bottom: none; }
+.recent-thumb {
+  width: 40px; height: 40px; border-radius: 6px; background: #f0f0f0;
+  display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+  overflow: hidden;
+}
+.recent-thumb svg { width: 22px; height: 22px; }
+.recent-thumb img { width: 100%; height: 100%; object-fit: cover; }
+.recent-info { flex: 1; min-width: 0; }
+.recent-name { font-size: 13px; font-weight: 500; color: #222; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.recent-meta { font-size: 11px; color: #aaa; }
+
+/* ── Search bar ─────────────────────────────────────────── */
+.search-bar {
+  display: flex; align-items: center; gap: 10px; margin-bottom: 16px;
+}
+.search-bar input {
+  flex: 1; max-width: 280px; border: 1.5px solid #e0e0e0; border-radius: 8px;
+  padding: 7px 12px 7px 32px; font-size: 13px; outline: none; transition: border-color .2s;
+  background: #fff url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='%23aaa' stroke-width='2'%3E%3Ccircle cx='11' cy='11' r='8'/%3E%3Cline x1='21' y1='21' x2='16.65' y2='16.65'/%3E%3C/svg%3E") no-repeat 10px center;
+}
+.search-bar input:focus { border-color: #1a237e; }
+
+/* ── SVG preview ─────────────────────────────────────────── */
+.svg-preview-box {
+  width: 80px; height: 80px; background: #f5f5f5; border-radius: 8px;
+  display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+}
+.svg-preview-box svg { width: 50px; height: 50px; }
+
+/* ── Settings sections ──────────────────────────────────── */
+.settings-section { margin-bottom: 28px; }
+.settings-section h4 { font-size: 14px; font-weight: 700; color: #1a237e; margin-bottom: 14px;
+  padding-bottom: 8px; border-bottom: 1.5px solid #e8eaf0; }
+
+/* ── Toast ──────────────────────────────────────────────── */
+.toast {
+  position: fixed; bottom: 24px; right: 24px; background: #1a237e; color: #fff;
+  padding: 12px 20px; border-radius: 8px; font-size: 13px; font-weight: 500;
+  z-index: 9999; box-shadow: 0 4px 16px rgba(0,0,0,.2);
+  animation: slideInToast .2s ease;
+}
+.toast.error { background: #e53935; }
+.toast.success { background: #2e7d32; }
+@keyframes slideInToast { from { opacity:0; transform:translateY(10px); } to { opacity:1; transform:translateY(0); } }
+</style>
+</head>
+<body>
+<div id="admin-root"></div>
+
+<script type="text/babel">
+const { useState, useEffect, useCallback, useRef, useMemo } = React;
+
+// ── AdminStore ──────────────────────────────────────────────────────
+const AdminStore = {
+  DEFAULTS: {
+    products: [
+      { id:'tshirt', name:'T-Shirt', icon:'👕', sides:['Fronte','Retro'],
+        mockups:{ Fronte:'/mockups/tshirt/fronte.png', Retro:'/mockups/tshirt/retro.png' },
+        colors:['#ffffff','#000000','#e74c3c','#3498db','#2ecc71','#f39c12','#9b59b6'],
+        sizes:['XS','S','M','L','XL','XXL'],
+        printZoneCm:{ x:11, y:9, w:28, h:34 }, productWidthCm:50, price:25.00 },
+      { id:'felpa', name:'Felpa', icon:'🧥', sides:['Fronte','Retro'],
+        mockups:{ Fronte:'/mockups/felpa/fronte.png', Retro:'/mockups/felpa/retro.png' },
+        colors:['#ffffff','#000000','#e74c3c','#2c3e50','#9b59b6'],
+        sizes:['XS','S','M','L','XL','XXL'],
+        printZoneCm:{ x:11, y:10, w:28, h:34 }, productWidthCm:50, price:35.00 },
+      { id:'hoodie', name:'Hoodie', icon:'🧤', sides:['Fronte','Retro'],
+        mockups:{ Fronte:'/mockups/hoodie/fronte.png', Retro:'/mockups/hoodie/retro.png' },
+        colors:['#ffffff','#000000','#e74c3c','#2c3e50','#3498db','#9b59b6'],
+        sizes:['XS','S','M','L','XL','XXL'],
+        printZoneCm:{ x:11, y:12, w:28, h:32 }, productWidthCm:50, price:45.00 },
+      { id:'manica_lunga', name:'Manica Lunga', icon:'👕', sides:['Fronte','Retro'],
+        mockups:{ Fronte:'/mockups/manica_lunga/fronte.png', Retro:'/mockups/manica_lunga/retro.png' },
+        colors:['#ffffff','#000000','#e74c3c','#3498db','#2ecc71','#2c3e50'],
+        sizes:['XS','S','M','L','XL','XXL'],
+        printZoneCm:{ x:11, y:9, w:28, h:34 }, productWidthCm:50, price:30.00 },
+      { id:'vneck', name:'V-Neck', icon:'👔', sides:['Fronte','Retro'],
+        mockups:{ Fronte:'/mockups/vneck/fronte.png', Retro:'/mockups/vneck/retro.png' },
+        colors:['#ffffff','#000000','#e74c3c','#3498db','#2ecc71','#f39c12'],
+        sizes:['XS','S','M','L','XL','XXL'],
+        printZoneCm:{ x:11, y:9, w:28, h:34 }, productWidthCm:50, price:28.00 },
+    ],
+    cliparts: [
+      { id:'star',      svg:'<polygon points="12,2 15.09,8.26 22,9.27 17,14.14 18.18,21.02 12,17.77 5.82,21.02 7,14.14 2,9.27 8.91,8.26" fill="currentColor"/>', label:'Stella',    category:'' },
+      { id:'heart',     svg:'<path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z" fill="currentColor"/>', label:'Cuore',     category:'' },
+      { id:'lightning', svg:'<polygon points="13,2 4.5,13.5 11,13.5 11,22 19.5,10.5 13,10.5" fill="currentColor"/>', label:'Fulmine',   category:'' },
+      { id:'diamond',   svg:'<polygon points="12,2 22,9 18,21 6,21 2,9" fill="currentColor"/>', label:'Diamante',  category:'' },
+      { id:'crown',     svg:'<path d="M2 20h20v2H2zM4 18l4-8 4 4 4-8 4 8H4z" fill="currentColor"/>', label:'Corona',    category:'' },
+      { id:'shield',    svg:'<path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" fill="currentColor"/>', label:'Scudo',     category:'' },
+      { id:'anchor',    svg:'<circle cx="12" cy="6" r="3" fill="none" stroke="currentColor" stroke-width="2"/><line x1="12" y1="9" x2="12" y2="22" stroke="currentColor" stroke-width="2"/><path d="M5 15l7 7 7-7" fill="none" stroke="currentColor" stroke-width="2"/><line x1="5" y1="9" x2="19" y2="9" stroke="currentColor" stroke-width="2"/>', label:'Ancora',    category:'' },
+      { id:'arrow',     svg:'<line x1="5" y1="12" x2="19" y2="12" stroke="currentColor" stroke-width="2"/><polyline points="12,5 19,12 12,19" fill="none" stroke="currentColor" stroke-width="2"/>', label:'Freccia',   category:'' },
+    ],
+    templates: [
+      { id:'t1', name:'Sport',   thumbnail:'', bg:'#1a1a2e', texts:['TEAM NAME','#23'],     colors:['#e74c3c','#fff'], category:'' },
+      { id:'t2', name:'Minimal', thumbnail:'', bg:'#fff',    texts:['MINIMAL','EST. 2025'], colors:['#000','#3fc7ba'], category:'' },
+      { id:'t3', name:'Vintage', thumbnail:'', bg:'#f5e6c8', texts:['VINTAGE','ORIGINAL'],  colors:['#795548','#5d4037'], category:'' },
+      { id:'t4', name:'Neon',    thumbnail:'', bg:'#0d0d0d', texts:['NEON GLOW'],           colors:['#39ff14','#ff0099'], category:'' },
+    ],
+    fonts: ['Arial','Georgia','Times New Roman','Courier New','Verdana','Impact','Tahoma','Oswald','Raleway','Montserrat'],
+    categories: [
+      { id:'c1', name:'Sport',    type:'clipart' },
+      { id:'c2', name:'Natura',   type:'clipart' },
+      { id:'c3', name:'Musica',   type:'template' },
+      { id:'c4', name:'Minimal',  type:'template' },
+    ],
+    orders: [],
+    settings: {
+      storeName: 'WonderSpit',
+      storeUrl: 'https://wonderspit-designer.netlify.app',
+      currency: 'EUR',
+      currencySymbol: '€',
+      primaryColor: '#3fc7ba',
+      adminPassword: 'wonderspit2025',
+      podProvider: 'Hoplix',
+      podUrl: '',
+      aiService: 'pollinations',
+      aiKey: '',
+      maxUploadMB: 5,
+    },
+  },
+  _k: k => `wonderspit_${k}`,
+  get(k) {
+    try { const r = localStorage.getItem(this._k(k)); return r ? JSON.parse(r) : JSON.parse(JSON.stringify(this.DEFAULTS[k] ?? null)); }
+    catch { return JSON.parse(JSON.stringify(this.DEFAULTS[k] ?? null)); }
+  },
+  set(k, v) { try { localStorage.setItem(this._k(k), JSON.stringify(v)); } catch {} },
+  reset(k) { localStorage.removeItem(this._k(k)); },
+};
+
+// ── Toast hook ──────────────────────────────────────────────────────
+function useToast() {
+  const [toast, setToast] = useState(null);
+  const show = useCallback((msg, type='success') => {
+    setToast({ msg, type });
+    setTimeout(() => setToast(null), 2800);
+  }, []);
+  const Toast = toast ? <div className={`toast ${toast.type}`}>{toast.msg}</div> : null;
+  return { show, Toast };
+}
+
+// ── ID generator ────────────────────────────────────────────────────
+const genId = () => Math.random().toString(36).slice(2, 9);
+
+// ── Login Page ──────────────────────────────────────────────────────
+function LoginPage({ onLogin }) {
+  const [pass, setPass] = useState('');
+  const [err, setErr] = useState('');
+  const handle = e => {
+    e.preventDefault();
+    const settings = AdminStore.get('settings');
+    const pwd = settings?.adminPassword || 'wonderspit2025';
+    if (pass === pwd) { onLogin(); }
+    else { setErr('Password errata.'); }
+  };
+  return (
+    <div className="login-page">
+      <div className="login-card">
+        <div style={{fontSize:40, marginBottom:8}}>✨</div>
+        <h1>WonderSpit Admin</h1>
+        <p>Inserisci la password per accedere al pannello</p>
+        <form onSubmit={handle}>
+          {err && <div className="err">{err}</div>}
+          <input
+            type="password" placeholder="Password admin" value={pass}
+            onChange={e => { setPass(e.target.value); setErr(''); }}
+            autoFocus
+          />
+          <button type="submit" className="login-btn">Accedi <i className="fa fa-arrow-right" style={{marginLeft:6}}></i></button>
+        </form>
+        <p style={{marginTop:16,fontSize:11,color:'#ccc'}}>Default: wonderspit2025</p>
+      </div>
+    </div>
+  );
+}
+
+// ── Sidebar ─────────────────────────────────────────────────────────
+const NAV = [
+  { section: 'Generale' },
+  { id:'dashboard',   label:'Dashboard',    icon:'fa-chart-line' },
+  { id:'orders',      label:'Ordini',       icon:'fa-shopping-cart' },
+  { section: 'Prodotti' },
+  { id:'products',    label:'Prodotti',     icon:'fa-tshirt' },
+  { section: 'Libreria' },
+  { id:'cliparts',    label:'Clipart',      icon:'fa-shapes' },
+  { id:'templates',   label:'Template',     icon:'fa-layer-group' },
+  { id:'fonts',       label:'Font',         icon:'fa-font' },
+  { id:'categories',  label:'Categorie',    icon:'fa-tags' },
+  { section: 'Configurazione' },
+  { id:'settings',    label:'Impostazioni', icon:'fa-sliders-h' },
+];
+
+function Sidebar({ page, setPage, onLogout }) {
+  return (
+    <div className="sidebar">
+      <div className="sidebar-logo">
+        <div className="sidebar-logo-icon"><i className="fa fa-magic"></i></div>
+        <div>
+          <div className="sidebar-logo-text">WonderSpit</div>
+          <div className="sidebar-logo-sub">Admin Panel</div>
+        </div>
+      </div>
+      <nav className="sidebar-nav">
+        {NAV.map((item, i) =>
+          item.section
+            ? <div key={i} className="sidebar-section">{item.section}</div>
+            : <div key={item.id} className={`nav-item${page===item.id?' active':''}`} onClick={() => setPage(item.id)}>
+                <i className={`fa ${item.icon}`}></i> {item.label}
+              </div>
+        )}
+      </nav>
+      <div className="sidebar-footer">
+        <button className="logout-btn" onClick={onLogout}>
+          <i className="fa fa-sign-out-alt"></i> Esci
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ── Dashboard ───────────────────────────────────────────────────────
+function Dashboard({ setPage }) {
+  const products   = AdminStore.get('products') || [];
+  const cliparts   = AdminStore.get('cliparts') || [];
+  const templates  = AdminStore.get('templates') || [];
+  const fonts      = AdminStore.get('fonts') || [];
+  const orders     = AdminStore.get('orders') || [];
+
+  const stats = [
+    { label:'Prodotti',  value: products.length,  icon:'fa-tshirt',       color:'#1e88e5' },
+    { label:'Clipart',   value: cliparts.length,   icon:'fa-heart',        color:'#81c784' },
+    { label:'Template',  value: templates.length,  icon:'fa-layer-group',  color:'#7460ee' },
+    { label:'Ordini',    value: orders.length,      icon:'fa-shopping-cart',color:'#fc4b6c' },
+  ];
+
+  const recentOrders = [...orders].sort((a,b) => b.date-a.date).slice(0,5);
+  const recentClipArts = cliparts.slice(-6).reverse();
+  const recentTemplates = templates.slice(-6).reverse();
+
+  return (
+    <div>
+      <div className="page-header">
+        <div>
+          <div className="page-title">Dashboard</div>
+          <div className="page-subtitle">Panoramica del tuo store WonderSpit</div>
+        </div>
+        <a href="index.html" target="_blank" className="view-site-btn">
+          <i className="fa fa-external-link-alt"></i> Apri Designer
+        </a>
+      </div>
+
+      <div className="stats-row">
+        {stats.map(s => (
+          <div key={s.label} className="stat-box">
+            <div className="stat-icon" style={{background:s.color}}>
+              <i className={`fa ${s.icon}`}></i>
+            </div>
+            <div>
+              <div className="stat-value">{s.value}</div>
+              <div className="stat-label">{s.label}</div>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      <div className="dash-row">
+        <div className="card">
+          <div className="card-header"><i className="fa fa-shopping-cart"></i> Ordini Recenti</div>
+          <div className="card-body">
+            {recentOrders.length === 0
+              ? <p className="no-data">Nessun ordine ancora.</p>
+              : <table className="lumise-table"><thead><tr>
+                  <th>#ID</th><th>Prodotto</th><th>Stato</th><th>Data</th>
+                </tr></thead><tbody>
+                  {recentOrders.map(o => (
+                    <tr key={o.id}>
+                      <td><strong>#{o.id}</strong></td>
+                      <td>{o.product}</td>
+                      <td><span className={`status-badge status-${o.status||'pending'}`}>{o.status||'In attesa'}</span></td>
+                      <td>{new Date(o.date).toLocaleDateString('it-IT')}</td>
+                    </tr>
+                  ))}
+                </tbody></table>
+            }
+          </div>
+        </div>
+
+        <div className="card">
+          <div className="card-header"><i className="fa fa-chart-bar"></i> Statistiche Rapide</div>
+          <div className="card-body">
+            <div style={{display:'flex',flexDirection:'column',gap:12}}>
+              {[
+                {label:'Font attivi', val: fonts.length, color:'#1a237e'},
+                {label:'Lati prodotto totali', val: products.reduce((a,p)=>(a+(p.sides?.length||0)),0), color:'#2e7d32'},
+                {label:'Colori totali', val: products.reduce((a,p)=>(a+(p.colors?.length||0)),0), color:'#6a1b9a'},
+              ].map(s => (
+                <div key={s.label} style={{display:'flex',alignItems:'center',justifyContent:'space-between',
+                  padding:'8px 0',borderBottom:'1px solid #f0f0f0'}}>
+                  <span style={{fontSize:13,color:'#555'}}>{s.label}</span>
+                  <span style={{fontWeight:700,fontSize:15,color:s.color}}>{s.val}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div className="dash-row">
+        <div className="card">
+          <div className="card-header" style={{justifyContent:'space-between'}}>
+            <span><i className="fa fa-heart"></i> Clipart Recenti</span>
+            <button className="btn-secondary btn-sm" onClick={() => setPage('cliparts')}>Vedi tutte</button>
+          </div>
+          <div className="card-body">
+            {recentClipArts.length === 0
+              ? <p className="no-data">Nessuna clipart.</p>
+              : <div className="dash-recent">
+                  {recentClipArts.map(c => (
+                    <div key={c.id} className="recent-item">
+                      <div className="recent-thumb">
+                        <svg viewBox="0 0 24 24" dangerouslySetInnerHTML={{__html: c.svg}} />
+                      </div>
+                      <div className="recent-info">
+                        <div className="recent-name">{c.label}</div>
+                        <div className="recent-meta">{c.category || 'Senza categoria'}</div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+            }
+          </div>
+        </div>
+
+        <div className="card">
+          <div className="card-header" style={{justifyContent:'space-between'}}>
+            <span><i className="fa fa-layer-group"></i> Template Recenti</span>
+            <button className="btn-secondary btn-sm" onClick={() => setPage('templates')}>Vedi tutti</button>
+          </div>
+          <div className="card-body">
+            {recentTemplates.length === 0
+              ? <p className="no-data">Nessun template.</p>
+              : <div className="dash-recent">
+                  {recentTemplates.map(t => (
+                    <div key={t.id} className="recent-item">
+                      <div className="recent-thumb" style={{background: t.bg||'#eee'}}>
+                        <span style={{fontSize:11,color:t.bg==='#fff'?'#333':'#fff',fontWeight:700}}>{(t.name||'').slice(0,3)}</span>
+                      </div>
+                      <div className="recent-info">
+                        <div className="recent-name">{t.name}</div>
+                        <div className="recent-meta">{t.category || 'Senza categoria'}</div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+            }
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Products Page ───────────────────────────────────────────────────
+function ProductsPage({ toast }) {
+  const [items, setItems] = useState(() => AdminStore.get('products') || []);
+  const [editing, setEditing] = useState(null); // null=list, obj=form
+  const [search, setSearch] = useState('');
+
+  const save = list => { setItems(list); AdminStore.set('products', list); };
+
+  const del = id => {
+    if (!confirm('Eliminare questo prodotto?')) return;
+    save(items.filter(x => x.id !== id));
+    toast.show('Prodotto eliminato', 'error');
+  };
+
+  const filtered = items.filter(p => p.name?.toLowerCase().includes(search.toLowerCase()));
+
+  if (editing !== null) return (
+    <ProductForm
+      init={editing} categories={AdminStore.get('categories') || []}
+      onSave={prod => {
+        const idx = items.findIndex(x => x.id === prod.id);
+        const newList = idx >= 0 ? items.map(x => x.id===prod.id ? prod : x) : [...items, prod];
+        save(newList); setEditing(null);
+        toast.show('Prodotto salvato!');
+      }}
+      onCancel={() => setEditing(null)}
+    />
+  );
+
+  return (
+    <div>
+      <div className="page-header">
+        <div>
+          <div className="page-title">Prodotti</div>
+          <div className="page-subtitle">{items.length} prodotti configurati</div>
+        </div>
+        <button className="btn-primary" onClick={() => setEditing({
+          id: genId(), name:'', icon:'👕', sides:['Fronte','Retro'],
+          mockups:{}, colors:['#ffffff','#000000'], sizes:['S','M','L','XL'],
+          printZoneCm:{x:11,y:9,w:28,h:34}, productWidthCm:50, price:0
+        })}>
+          <i className="fa fa-plus"></i> Aggiungi Prodotto
+        </button>
+      </div>
+
+      <div className="card">
+        <div className="card-header" style={{justifyContent:'space-between'}}>
+          <span>Lista Prodotti</span>
+          <input
+            type="text" placeholder="Cerca prodotto..." value={search}
+            onChange={e => setSearch(e.target.value)}
+            style={{border:'1.5px solid #e0e0e0',borderRadius:7,padding:'5px 10px',fontSize:13,outline:'none',width:200}}
+          />
+        </div>
+        <div className="table-wrap">
+          <table className="lumise-table">
+            <thead><tr>
+              <th>Prodotto</th><th>Colori</th><th>Taglie</th><th>Lati</th><th>Prezzo</th><th>Azioni</th>
+            </tr></thead>
+            <tbody>
+              {filtered.length === 0 && <tr><td colSpan={6} className="no-data">Nessun prodotto trovato.</td></tr>}
+              {filtered.map(p => (
+                <tr key={p.id}>
+                  <td>
+                    <div style={{display:'flex',alignItems:'center',gap:10}}>
+                      <span style={{fontSize:22}}>{p.icon}</span>
+                      <div>
+                        <div style={{fontWeight:600}}>{p.name}</div>
+                        <div style={{fontSize:11,color:'#aaa'}}>ID: {p.id}</div>
+                      </div>
+                    </div>
+                  </td>
+                  <td>
+                    <div style={{display:'flex',gap:4,flexWrap:'wrap'}}>
+                      {(p.colors||[]).slice(0,6).map((c,i) => (
+                        <div key={i} style={{width:16,height:16,borderRadius:'50%',background:c,border:'1px solid #e0e0e0'}}/>
+                      ))}
+                      {(p.colors||[]).length > 6 && <span style={{fontSize:10,color:'#888'}}>+{p.colors.length-6}</span>}
+                    </div>
+                  </td>
+                  <td><span style={{fontSize:12,color:'#555'}}>{(p.sizes||[]).join(', ')||'—'}</span></td>
+                  <td><span style={{fontSize:12}}>{(p.sides||[]).join(', ')||'—'}</span></td>
+                  <td><strong style={{color:'#1a237e'}}>€{parseFloat(p.price||0).toFixed(2)}</strong></td>
+                  <td>
+                    <div style={{display:'flex',gap:6}}>
+                      <button className="btn-edit btn-sm" onClick={() => setEditing({...p})}>
+                        <i className="fa fa-edit"></i>
+                      </button>
+                      <button className="btn-danger btn-sm" onClick={() => del(p.id)}>
+                        <i className="fa fa-trash"></i>
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ProductForm({ init, onSave, onCancel }) {
+  const [p, setP] = useState({...init});
+  const [newColor, setNewColor] = useState('#ff0000');
+  const [newSize, setNewSize] = useState('');
+  const ALL_SIDES = ['Fronte','Retro','Sinistra','Destra','Manica Sx','Manica Dx'];
+
+  const upd = (k, v) => setP(x => ({...x, [k]: v}));
+  const updMockup = (side, url) => setP(x => ({...x, mockups:{...x.mockups, [side]: url}}));
+  const updPrint = (k, v) => setP(x => ({...x, printZoneCm:{...x.printZoneCm, [k]: parseFloat(v)||0}}));
+
+  const toggleSide = side => {
+    const sides = p.sides.includes(side) ? p.sides.filter(s=>s!==side) : [...p.sides, side];
+    upd('sides', sides);
+  };
+
+  const addColor = () => {
+    if (!p.colors.includes(newColor)) upd('colors', [...p.colors, newColor]);
+  };
+  const delColor = c => upd('colors', p.colors.filter(x=>x!==c));
+  const addSize = () => {
+    if (newSize && !p.sizes?.includes(newSize)) { upd('sizes', [...(p.sizes||[]), newSize.toUpperCase()]); setNewSize(''); }
+  };
+  const delSize = s => upd('sizes', (p.sizes||[]).filter(x=>x!==s));
+
+  return (
+    <div>
+      <div className="page-header">
+        <div>
+          <div className="page-title">{init.name ? `Modifica: ${init.name}` : 'Nuovo Prodotto'}</div>
+        </div>
+        <div style={{display:'flex',gap:10}}>
+          <button className="btn-secondary" onClick={onCancel}>Annulla</button>
+          <button className="btn-primary" onClick={() => onSave(p)}>
+            <i className="fa fa-save"></i> Salva
+          </button>
+        </div>
+      </div>
+
+      <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:20}}>
+        {/* Colonna sinistra */}
+        <div style={{display:'flex',flexDirection:'column',gap:16}}>
+          <div className="card">
+            <div className="card-header"><i className="fa fa-info-circle"></i> Dati Principali</div>
+            <div className="card-body">
+              <div className="form-group">
+                <label className="form-label">Nome Prodotto *</label>
+                <input className="form-control" value={p.name} onChange={e=>upd('name',e.target.value)} placeholder="Es: T-Shirt Classic"/>
+              </div>
+              <div className="form-row">
+                <div className="form-group">
+                  <label className="form-label">Emoji / Icona</label>
+                  <input className="form-control" value={p.icon} onChange={e=>upd('icon',e.target.value)} placeholder="👕"/>
+                </div>
+                <div className="form-group">
+                  <label className="form-label">Prezzo Base (€)</label>
+                  <input className="form-control" type="number" step="0.01" min="0" value={p.price||0} onChange={e=>upd('price',e.target.value)}/>
+                </div>
+              </div>
+              <div className="form-group">
+                <label className="form-label">Larghezza Prodotto Reale (CM)</label>
+                <input className="form-control" type="number" value={p.productWidthCm||50} onChange={e=>upd('productWidthCm',parseFloat(e.target.value)||50)}/>
+                <div className="form-hint">Usato per convertire zona stampa da CM a pixel</div>
+              </div>
+            </div>
+          </div>
+
+          <div className="card">
+            <div className="card-header"><i className="fa fa-ruler-combined"></i> Zona Stampa (CM)</div>
+            <div className="card-body">
+              <div className="form-hint" style={{marginBottom:10}}>Coordinate dall'angolo in alto a sinistra del prodotto</div>
+              <div className="print-zone-grid">
+                {['x','y','w','h'].map(k => (
+                  <div key={k} className="form-group">
+                    <label className="form-label">{k === 'x' ? 'X (sinistra)' : k==='y'?'Y (alto)':k==='w'?'Larghezza':'Altezza'}</label>
+                    <input className="form-control" type="number" step="0.1" value={p.printZoneCm?.[k]||0} onChange={e=>updPrint(k,e.target.value)}/>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          <div className="card">
+            <div className="card-header"><i className="fa fa-palette"></i> Colori Disponibili</div>
+            <div className="card-body">
+              <div className="color-palette">
+                {(p.colors||[]).map((c,i) => (
+                  <div key={i} className="color-swatch" style={{background:c}}>
+                    <div className="del-color" onClick={()=>delColor(c)}>✕</div>
+                  </div>
+                ))}
+              </div>
+              <div className="color-input-row" style={{marginTop:12}}>
+                <div className="color-preview" style={{background:newColor}}></div>
+                <input type="color" value={newColor} onChange={e=>setNewColor(e.target.value)}
+                  style={{width:40,height:32,border:'none',cursor:'pointer',background:'none',padding:0}}/>
+                <input className="form-control" value={newColor} onChange={e=>setNewColor(e.target.value)}
+                  style={{width:100}} placeholder="#ffffff"/>
+                <button className="btn-primary btn-sm" onClick={addColor}>
+                  <i className="fa fa-plus"></i> Aggiungi
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <div className="card">
+            <div className="card-header"><i className="fa fa-tshirt"></i> Taglie</div>
+            <div className="card-body">
+              <div className="sizes-row">
+                {(p.sizes||[]).map(s => (
+                  <div key={s} className="size-chip">
+                    {s} <button onClick={()=>delSize(s)}>✕</button>
+                  </div>
+                ))}
+              </div>
+              <div style={{display:'flex',gap:8,marginTop:10}}>
+                <input className="form-control" value={newSize} onChange={e=>setNewSize(e.target.value)}
+                  placeholder="Es: XXL" onKeyDown={e=>e.key==='Enter'&&addSize()}
+                  style={{width:80}}/>
+                <button className="btn-primary btn-sm" onClick={addSize}>
+                  <i className="fa fa-plus"></i>
+                </button>
+                <button className="btn-secondary btn-sm" onClick={()=>upd('sizes',['XS','S','M','L','XL','XXL'])}>
+                  Reset default
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Colonna destra */}
+        <div style={{display:'flex',flexDirection:'column',gap:16}}>
+          <div className="card">
+            <div className="card-header"><i className="fa fa-layer-group"></i> Lati del Prodotto</div>
+            <div className="card-body">
+              <div style={{display:'flex',flexWrap:'wrap',gap:10}}>
+                {ALL_SIDES.map(side => (
+                  <label key={side} style={{display:'flex',alignItems:'center',gap:6,cursor:'pointer',
+                    padding:'6px 12px',background: p.sides.includes(side)?'#e8eaf6':'#f5f5f5',
+                    borderRadius:8,fontSize:13,fontWeight:500,
+                    border: p.sides.includes(side)?'1.5px solid #3949ab':'1.5px solid #e0e0e0',
+                    color: p.sides.includes(side)?'#1a237e':'#555', transition:'all .15s'}}>
+                    <input type="checkbox" checked={p.sides.includes(side)} onChange={()=>toggleSide(side)} style={{display:'none'}}/>
+                    {p.sides.includes(side) ? '✓' : ''} {side}
+                  </label>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          <div className="card">
+            <div className="card-header"><i className="fa fa-image"></i> Mockup per Lato</div>
+            <div className="card-body">
+              <div style={{display:'flex',flexDirection:'column',gap:12}}>
+                {p.sides.map(side => (
+                  <div key={side} className="mockup-side-card">
+                    <h5>{side}</h5>
+                    <input
+                      className="form-control"
+                      value={p.mockups?.[side] || ''}
+                      onChange={e=>updMockup(side,e.target.value)}
+                      placeholder={`URL mockup per ${side}...`}
+                    />
+                    <div className="form-hint">Es: /mockups/tshirt/fronte.png</div>
+                    {p.mockups?.[side] && (
+                      <div style={{marginTop:8,background:'#f5f5f5',borderRadius:6,padding:8,display:'flex',justifyContent:'center'}}>
+                        <img src={p.mockups[side]} alt={side} style={{maxHeight:80,maxWidth:'100%',objectFit:'contain'}}
+                          onError={e=>e.target.style.display='none'}/>
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Cliparts Page ───────────────────────────────────────────────────
+function ClipartsPage({ toast }) {
+  const [items, setItems] = useState(() => AdminStore.get('cliparts') || []);
+  const [editing, setEditing] = useState(null);
+  const [search, setSearch] = useState('');
+  const categories = (AdminStore.get('categories')||[]).filter(c=>c.type==='clipart');
+
+  const save = list => { setItems(list); AdminStore.set('cliparts', list); };
+
+  const del = id => {
+    if (!confirm('Eliminare questa clipart?')) return;
+    save(items.filter(x => x.id !== id));
+    toast.show('Clipart eliminata', 'error');
+  };
+
+  const filtered = items.filter(c => c.label?.toLowerCase().includes(search.toLowerCase()));
+
+  if (editing !== null) return (
+    <ClipArtForm
+      init={editing} categories={categories}
+      onSave={item => {
+        const idx = items.findIndex(x => x.id === item.id);
+        const list = idx >= 0 ? items.map(x => x.id===item.id?item:x) : [...items, item];
+        save(list); setEditing(null); toast.show('Clipart salvata!');
+      }}
+      onCancel={() => setEditing(null)}
+    />
+  );
+
+  return (
+    <div>
+      <div className="page-header">
+        <div>
+          <div className="page-title">Clipart</div>
+          <div className="page-subtitle">{items.length} clipart nella libreria</div>
+        </div>
+        <button className="btn-primary" onClick={() => setEditing({ id:genId(), label:'', svg:'', category:'' })}>
+          <i className="fa fa-plus"></i> Aggiungi Clipart
+        </button>
+      </div>
+
+      <div className="card">
+        <div className="card-header" style={{justifyContent:'space-between'}}>
+          <span>Libreria Clipart</span>
+          <input
+            type="text" placeholder="Cerca clipart..." value={search}
+            onChange={e=>setSearch(e.target.value)}
+            style={{border:'1.5px solid #e0e0e0',borderRadius:7,padding:'5px 10px',fontSize:13,outline:'none',width:200}}
+          />
+        </div>
+        <div className="card-body">
+          {filtered.length === 0 && <p className="no-data">Nessuna clipart trovata.</p>}
+          <div className="thumb-grid">
+            {filtered.map(c => (
+              <div key={c.id} className="thumb-item">
+                <div className="thumb-img">
+                  <svg viewBox="0 0 24 24" dangerouslySetInnerHTML={{__html: c.svg}}
+                    style={{color:'#333'}} />
+                </div>
+                <div className="thumb-label">{c.label}</div>
+                <div className="thumb-actions">
+                  <button className="thumb-action-btn thumb-edit" onClick={() => setEditing({...c})}>
+                    <i className="fa fa-edit"></i>
+                  </button>
+                  <button className="thumb-action-btn thumb-del" onClick={() => del(c.id)}>
+                    <i className="fa fa-trash"></i>
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ClipArtForm({ init, categories, onSave, onCancel }) {
+  const [item, setItem] = useState({...init});
+  const upd = (k,v) => setItem(x=>({...x,[k]:v}));
+  return (
+    <div>
+      <div className="page-header">
+        <div><div className="page-title">{init.label?`Modifica: ${init.label}`:'Nuova Clipart'}</div></div>
+        <div style={{display:'flex',gap:10}}>
+          <button className="btn-secondary" onClick={onCancel}>Annulla</button>
+          <button className="btn-primary" onClick={()=>onSave(item)}><i className="fa fa-save"></i> Salva</button>
+        </div>
+      </div>
+      <div className="card">
+        <div className="card-body form-wrap">
+          <div style={{display:'flex',gap:20,alignItems:'flex-start'}}>
+            <div style={{flex:1}}>
+              <div className="form-group">
+                <label className="form-label">Nome / Etichetta *</label>
+                <input className="form-control" value={item.label} onChange={e=>upd('label',e.target.value)} placeholder="Es: Stella"/>
+              </div>
+              <div className="form-group">
+                <label className="form-label">Categoria</label>
+                <select className="form-control" value={item.category} onChange={e=>upd('category',e.target.value)}>
+                  <option value="">Senza categoria</option>
+                  {categories.map(c=><option key={c.id} value={c.name}>{c.name}</option>)}
+                </select>
+              </div>
+              <div className="form-group">
+                <label className="form-label">Codice SVG Inner *</label>
+                <textarea className="form-control textarea" value={item.svg} onChange={e=>upd('svg',e.target.value)}
+                  placeholder="Incolla il contenuto interno SVG (senza il tag <svg>)&#10;Es: <path d=&quot;M12 2...&quot; fill=&quot;currentColor&quot;/>"/>
+                <div className="form-hint">Solo il contenuto interno — NON includere il tag &lt;svg&gt; esterno. Usa fill="currentColor" per colore dinamico.</div>
+              </div>
+            </div>
+            <div style={{width:120,textAlign:'center'}}>
+              <div className="form-label">Anteprima</div>
+              <div className="svg-preview-box" style={{width:100,height:100,margin:'0 auto'}}>
+                {item.svg
+                  ? <svg viewBox="0 0 24 24" style={{width:60,height:60,color:'#1a237e'}}
+                      dangerouslySetInnerHTML={{__html:item.svg}}/>
+                  : <i className="fa fa-image" style={{color:'#ccc',fontSize:30}}/>
+                }
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Templates Page ──────────────────────────────────────────────────
+function TemplatesPage({ toast }) {
+  const [items, setItems] = useState(() => AdminStore.get('templates') || []);
+  const [editing, setEditing] = useState(null);
+  const [search, setSearch] = useState('');
+  const categories = (AdminStore.get('categories')||[]).filter(c=>c.type==='template');
+
+  const save = list => { setItems(list); AdminStore.set('templates', list); };
+  const del = id => {
+    if (!confirm('Eliminare questo template?')) return;
+    save(items.filter(x => x.id !== id));
+    toast.show('Template eliminato', 'error');
+  };
+
+  const filtered = items.filter(t => t.name?.toLowerCase().includes(search.toLowerCase()));
+
+  if (editing !== null) return (
+    <TemplateForm
+      init={editing} categories={categories}
+      onSave={item => {
+        const idx = items.findIndex(x=>x.id===item.id);
+        save(idx>=0 ? items.map(x=>x.id===item.id?item:x) : [...items,item]);
+        setEditing(null); toast.show('Template salvato!');
+      }}
+      onCancel={()=>setEditing(null)}
+    />
+  );
+
+  return (
+    <div>
+      <div className="page-header">
+        <div>
+          <div className="page-title">Template</div>
+          <div className="page-subtitle">{items.length} template disponibili</div>
+        </div>
+        <button className="btn-primary" onClick={()=>setEditing({id:genId(),name:'',thumbnail:'',bg:'#ffffff',texts:[''],colors:['#000000'],category:''})}>
+          <i className="fa fa-plus"></i> Aggiungi Template
+        </button>
+      </div>
+      <div className="card">
+        <div className="card-header" style={{justifyContent:'space-between'}}>
+          <span>Libreria Template</span>
+          <input type="text" placeholder="Cerca template..." value={search}
+            onChange={e=>setSearch(e.target.value)}
+            style={{border:'1.5px solid #e0e0e0',borderRadius:7,padding:'5px 10px',fontSize:13,outline:'none',width:200}}/>
+        </div>
+        <div className="card-body">
+          {filtered.length === 0 && <p className="no-data">Nessun template trovato.</p>}
+          <div className="thumb-grid">
+            {filtered.map(t => (
+              <div key={t.id} className="thumb-item">
+                <div className="thumb-img" style={{background:t.bg||'#f5f5f5', flexDirection:'column',gap:4}}>
+                  {(t.texts||[]).slice(0,2).map((tx,i)=>(
+                    <span key={i} style={{fontSize:i===0?10:8,fontWeight:700,color:t.colors?.[i]||(t.bg==='#ffffff'?'#000':'#fff'),
+                      textAlign:'center',padding:'0 4px',maxWidth:'100%',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>
+                      {tx}
+                    </span>
+                  ))}
+                </div>
+                <div className="thumb-label">{t.name}</div>
+                <div className="thumb-actions">
+                  <button className="thumb-action-btn thumb-edit" onClick={()=>setEditing({...t,texts:[...(t.texts||[])],colors:[...(t.colors||[])]})}>
+                    <i className="fa fa-edit"></i>
+                  </button>
+                  <button className="thumb-action-btn thumb-del" onClick={()=>del(t.id)}>
+                    <i className="fa fa-trash"></i>
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function TemplateForm({ init, categories, onSave, onCancel }) {
+  const [item, setItem] = useState({...init, texts:[...(init.texts||[''])], colors:[...(init.colors||['#000'])]});
+  const upd = (k,v) => setItem(x=>({...x,[k]:v}));
+
+  const updText = (i,v) => { const a=[...item.texts]; a[i]=v; upd('texts',a); };
+  const addText = () => upd('texts',[...item.texts,'']);
+  const delText = i => upd('texts',item.texts.filter((_,idx)=>idx!==i));
+  const updColor = (i,v) => { const a=[...item.colors]; a[i]=v; upd('colors',a); };
+  const addColor = () => upd('colors',[...item.colors,'#000000']);
+  const delColor = i => upd('colors',item.colors.filter((_,idx)=>idx!==i));
+
+  return (
+    <div>
+      <div className="page-header">
+        <div><div className="page-title">{init.name?`Modifica: ${init.name}`:'Nuovo Template'}</div></div>
+        <div style={{display:'flex',gap:10}}>
+          <button className="btn-secondary" onClick={onCancel}>Annulla</button>
+          <button className="btn-primary" onClick={()=>onSave(item)}><i className="fa fa-save"></i> Salva</button>
+        </div>
+      </div>
+      <div style={{display:'grid',gridTemplateColumns:'1fr auto',gap:20}}>
+        <div className="card">
+          <div className="card-body">
+            <div className="form-group">
+              <label className="form-label">Nome Template *</label>
+              <input className="form-control" value={item.name} onChange={e=>upd('name',e.target.value)} placeholder="Es: Sport"/>
+            </div>
+            <div className="form-row">
+              <div className="form-group">
+                <label className="form-label">Colore Sfondo</label>
+                <div className="color-input-row">
+                  <input type="color" value={item.bg} onChange={e=>upd('bg',e.target.value)}
+                    style={{width:40,height:32,border:'none',cursor:'pointer',background:'none',padding:0}}/>
+                  <input className="form-control" value={item.bg} onChange={e=>upd('bg',e.target.value)}/>
+                </div>
+              </div>
+              <div className="form-group">
+                <label className="form-label">Categoria</label>
+                <select className="form-control" value={item.category} onChange={e=>upd('category',e.target.value)}>
+                  <option value="">Senza categoria</option>
+                  {categories.map(c=><option key={c.id} value={c.name}>{c.name}</option>)}
+                </select>
+              </div>
+            </div>
+            <div className="form-group">
+              <label className="form-label">Testi del Template</label>
+              {item.texts.map((tx,i)=>(
+                <div key={i} style={{display:'flex',gap:8,marginBottom:8}}>
+                  <input className="form-control" value={tx} onChange={e=>updText(i,e.target.value)} placeholder={`Testo ${i+1}`}/>
+                  <button className="btn-danger btn-sm" onClick={()=>delText(i)}><i className="fa fa-times"></i></button>
+                </div>
+              ))}
+              <button className="btn-secondary btn-sm" onClick={addText}><i className="fa fa-plus"></i> Aggiungi testo</button>
+            </div>
+            <div className="form-group">
+              <label className="form-label">Colori del Template</label>
+              {item.colors.map((c,i)=>(
+                <div key={i} className="color-input-row" style={{marginBottom:8}}>
+                  <div className="color-preview" style={{background:c}}></div>
+                  <input type="color" value={c} onChange={e=>updColor(i,e.target.value)}
+                    style={{width:36,height:30,border:'none',cursor:'pointer',background:'none',padding:0}}/>
+                  <input className="form-control" value={c} onChange={e=>updColor(i,e.target.value)}/>
+                  <button className="btn-danger btn-sm" onClick={()=>delColor(i)}><i className="fa fa-times"></i></button>
+                </div>
+              ))}
+              <button className="btn-secondary btn-sm" onClick={addColor}><i className="fa fa-plus"></i> Aggiungi colore</button>
+            </div>
+          </div>
+        </div>
+        <div style={{width:160}}>
+          <div className="card">
+            <div className="card-header">Anteprima</div>
+            <div className="card-body" style={{padding:12}}>
+              <div style={{width:'100%',aspectRatio:'1',background:item.bg,borderRadius:8,
+                display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',gap:4,padding:8}}>
+                {item.texts.filter(t=>t).map((t,i)=>(
+                  <span key={i} style={{fontSize:i===0?11:9,fontWeight:700,color:item.colors[i]||(item.bg==='#ffffff'?'#000':'#fff'),
+                    textAlign:'center',maxWidth:'100%',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>
+                    {t}
+                  </span>
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Fonts Page ──────────────────────────────────────────────────────
+function FontsPage({ toast }) {
+  const [fonts, setFonts] = useState(() => AdminStore.get('fonts') || []);
+  const [newFont, setNewFont] = useState('');
+  const [search, setSearch] = useState('');
+
+  const save = list => { setFonts(list); AdminStore.set('fonts', list); };
+  const add = () => {
+    const f = newFont.trim();
+    if (!f || fonts.includes(f)) return;
+    save([...fonts, f]); setNewFont(''); toast.show('Font aggiunto!');
+  };
+  const del = f => { save(fonts.filter(x=>x!==f)); toast.show('Font rimosso', 'error'); };
+
+  const filtered = fonts.filter(f=>f.toLowerCase().includes(search.toLowerCase()));
+
+  const GOOGLE_SUGGEST = ['Oswald','Raleway','Montserrat','Lato','Open Sans','Roboto','Playfair Display',
+    'Bebas Neue','Abril Fatface','Pacifico','Dancing Script','Lobster','Permanent Marker','Anton'];
+
+  return (
+    <div>
+      <div className="page-header">
+        <div>
+          <div className="page-title">Font</div>
+          <div className="page-subtitle">{fonts.length} font disponibili nel designer</div>
+        </div>
+      </div>
+
+      <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:20}}>
+        <div className="card">
+          <div className="card-header"><i className="fa fa-plus-circle"></i> Aggiungi Font</div>
+          <div className="card-body">
+            <div className="form-group">
+              <label className="form-label">Nome Font (Google Fonts)</label>
+              <input className="form-control" value={newFont} onChange={e=>setNewFont(e.target.value)}
+                onKeyDown={e=>e.key==='Enter'&&add()} placeholder="Es: Roboto"/>
+              <div className="form-hint">Il font deve essere disponibile su Google Fonts o già installato nel sistema</div>
+            </div>
+            <button className="btn-primary" onClick={add}><i className="fa fa-plus"></i> Aggiungi</button>
+            <div style={{marginTop:16}}>
+              <div className="form-label">Suggeriti</div>
+              <div className="tag-list" style={{marginTop:8}}>
+                {GOOGLE_SUGGEST.filter(f=>!fonts.includes(f)).map(f=>(
+                  <div key={f} className="tag" style={{cursor:'pointer'}} onClick={()=>{ save([...fonts,f]); toast.show(`${f} aggiunto!`); }}>
+                    {f}
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div className="card">
+          <div className="card-header" style={{justifyContent:'space-between'}}>
+            <span>Font Attivi ({fonts.length})</span>
+            <input type="text" placeholder="Cerca..." value={search} onChange={e=>setSearch(e.target.value)}
+              style={{border:'1.5px solid #e0e0e0',borderRadius:7,padding:'4px 10px',fontSize:12,outline:'none',width:140}}/>
+          </div>
+          <div className="table-wrap">
+            <table className="lumise-table">
+              <thead><tr><th>Font</th><th>Anteprima</th><th></th></tr></thead>
+              <tbody>
+                {filtered.length===0 && <tr><td colSpan={3} className="no-data">Nessun font.</td></tr>}
+                {filtered.map(f=>(
+                  <tr key={f}>
+                    <td><strong style={{fontSize:13}}>{f}</strong></td>
+                    <td><span style={{fontFamily:f,fontSize:15}}>Abc 123</span></td>
+                    <td>
+                      <button className="btn-danger btn-sm" onClick={()=>del(f)}>
+                        <i className="fa fa-trash"></i>
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Categories Page ─────────────────────────────────────────────────
+function CategoriesPage({ toast }) {
+  const [items, setItems] = useState(() => AdminStore.get('categories') || []);
+  const [form, setForm] = useState({ name:'', type:'clipart' });
+  const [editId, setEditId] = useState(null);
+
+  const save = list => { setItems(list); AdminStore.set('categories', list); };
+  const del = id => { if(!confirm('Eliminare?')) return; save(items.filter(x=>x.id!==id)); toast.show('Eliminata','error'); };
+  const submit = () => {
+    if (!form.name.trim()) return;
+    if (editId) {
+      save(items.map(x=>x.id===editId?{...x,...form}:x));
+      setEditId(null);
+    } else {
+      save([...items,{id:genId(),...form}]);
+    }
+    setForm({name:'',type:'clipart'}); toast.show('Categoria salvata!');
+  };
+  const startEdit = c => { setForm({name:c.name,type:c.type}); setEditId(c.id); };
+
+  return (
+    <div>
+      <div className="page-header">
+        <div>
+          <div className="page-title">Categorie</div>
+          <div className="page-subtitle">Categorie per clipart e template</div>
+        </div>
+      </div>
+      <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:20}}>
+        <div className="card">
+          <div className="card-header"><i className="fa fa-tag"></i> {editId ? 'Modifica Categoria' : 'Nuova Categoria'}</div>
+          <div className="card-body">
+            <div className="form-group">
+              <label className="form-label">Nome *</label>
+              <input className="form-control" value={form.name} onChange={e=>setForm(x=>({...x,name:e.target.value}))} placeholder="Es: Sport"/>
+            </div>
+            <div className="form-group">
+              <label className="form-label">Tipo</label>
+              <select className="form-control" value={form.type} onChange={e=>setForm(x=>({...x,type:e.target.value}))}>
+                <option value="clipart">Clipart</option>
+                <option value="template">Template</option>
+              </select>
+            </div>
+            <div style={{display:'flex',gap:10}}>
+              <button className="btn-primary" onClick={submit}><i className="fa fa-save"></i> {editId?'Aggiorna':'Aggiungi'}</button>
+              {editId && <button className="btn-secondary" onClick={()=>{ setEditId(null); setForm({name:'',type:'clipart'}); }}>Annulla</button>}
+            </div>
+          </div>
+        </div>
+        <div className="card">
+          <div className="card-header">Lista Categorie ({items.length})</div>
+          <div className="table-wrap">
+            <table className="lumise-table">
+              <thead><tr><th>Nome</th><th>Tipo</th><th>Azioni</th></tr></thead>
+              <tbody>
+                {items.length===0 && <tr><td colSpan={3} className="no-data">Nessuna categoria.</td></tr>}
+                {items.map(c=>(
+                  <tr key={c.id}>
+                    <td><strong>{c.name}</strong></td>
+                    <td>
+                      <span className={`status-badge ${c.type==='clipart'?'status-processing':'status-completed'}`}>
+                        {c.type}
+                      </span>
+                    </td>
+                    <td>
+                      <div style={{display:'flex',gap:6}}>
+                        <button className="btn-edit btn-sm" onClick={()=>startEdit(c)}><i className="fa fa-edit"></i></button>
+                        <button className="btn-danger btn-sm" onClick={()=>del(c.id)}><i className="fa fa-trash"></i></button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Orders Page ─────────────────────────────────────────────────────
+function OrdersPage({ toast }) {
+  const [orders, setOrders] = useState(() => AdminStore.get('orders') || []);
+  const [detail, setDetail] = useState(null);
+  const [search, setSearch] = useState('');
+  const [filterStatus, setFilterStatus] = useState('');
+
+  const updateStatus = (id, status) => {
+    const list = orders.map(o=>o.id===id?{...o,status}:o);
+    setOrders(list); AdminStore.set('orders',list); toast.show('Stato aggiornato!');
+  };
+  const del = id => {
+    if(!confirm('Eliminare ordine?')) return;
+    const list = orders.filter(o=>o.id!==id);
+    setOrders(list); AdminStore.set('orders',list); toast.show('Ordine eliminato','error');
+  };
+
+  let filtered = orders;
+  if (search) filtered = filtered.filter(o=>(o.product||'').toLowerCase().includes(search.toLowerCase()) || String(o.id).includes(search));
+  if (filterStatus) filtered = filtered.filter(o=>o.status===filterStatus);
+  filtered = [...filtered].sort((a,b)=>b.date-a.date);
+
+  return (
+    <div>
+      <div className="page-header">
+        <div>
+          <div className="page-title">Ordini</div>
+          <div className="page-subtitle">{orders.length} ordini ricevuti dal designer</div>
+        </div>
+        <button className="btn-secondary" onClick={()=>{ AdminStore.set('orders',[]); setOrders([]); toast.show('Ordini svuotati','error'); }}>
+          <i className="fa fa-trash"></i> Svuota
+        </button>
+      </div>
+
+      {detail && (
+        <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,.5)',zIndex:1000,display:'flex',alignItems:'center',justifyContent:'center'}}
+          onClick={()=>setDetail(null)}>
+          <div onClick={e=>e.stopPropagation()} style={{background:'#fff',borderRadius:12,padding:28,width:480,maxHeight:'80vh',overflow:'auto'}}>
+            <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:18}}>
+              <h3 style={{color:'#1a237e'}}>Ordine #{detail.id}</h3>
+              <button onClick={()=>setDetail(null)} style={{background:'none',border:'none',cursor:'pointer',fontSize:20,color:'#aaa'}}>✕</button>
+            </div>
+            <table className="lumise-table" style={{marginBottom:16}}>
+              <tbody>
+                {[['Prodotto',detail.product],['Colore',detail.color],['Taglia',detail.size],
+                  ['Lato',detail.side],['Prezzo',`€${parseFloat(detail.price||0).toFixed(2)}`],
+                  ['Data',new Date(detail.date).toLocaleString('it-IT')],
+                  ['Stato',detail.status||'In attesa']].map(([k,v])=>(
+                  <tr key={k}><td style={{fontWeight:600,color:'#555',width:120}}>{k}</td><td>{v||'—'}</td></tr>
+                ))}
+              </tbody>
+            </table>
+            {detail.designPreview && (
+              <div>
+                <div className="form-label">Design Preview</div>
+                <img src={detail.designPreview} alt="design" style={{width:'100%',borderRadius:8,border:'1px solid #e0e0e0',marginTop:6}}/>
+              </div>
+            )}
+            <div style={{marginTop:16,display:'flex',gap:8}}>
+              {['In attesa','In lavorazione','Spedito','Completato'].map(s=>(
+                <button key={s} className={`btn-sm ${detail.status===s?'btn-primary':'btn-secondary'}`}
+                  onClick={()=>{ updateStatus(detail.id,s); setDetail({...detail,status:s}); }}>
+                  {s}
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
+      <div className="card">
+        <div className="card-header" style={{justifyContent:'space-between',flexWrap:'wrap',gap:10}}>
+          <span>Lista Ordini</span>
+          <div style={{display:'flex',gap:10}}>
+            <input type="text" placeholder="Cerca..." value={search} onChange={e=>setSearch(e.target.value)}
+              style={{border:'1.5px solid #e0e0e0',borderRadius:7,padding:'5px 10px',fontSize:13,outline:'none',width:160}}/>
+            <select value={filterStatus} onChange={e=>setFilterStatus(e.target.value)}
+              style={{border:'1.5px solid #e0e0e0',borderRadius:7,padding:'5px 10px',fontSize:13,outline:'none',background:'#fff'}}>
+              <option value="">Tutti gli stati</option>
+              <option value="In attesa">In attesa</option>
+              <option value="In lavorazione">In lavorazione</option>
+              <option value="Spedito">Spedito</option>
+              <option value="Completato">Completato</option>
+            </select>
+          </div>
+        </div>
+        <div className="table-wrap">
+          <table className="lumise-table">
+            <thead><tr>
+              <th>#ID</th><th>Prodotto</th><th>Colore</th><th>Taglia</th><th>Prezzo</th><th>Stato</th><th>Data</th><th>Azioni</th>
+            </tr></thead>
+            <tbody>
+              {filtered.length===0 && <tr><td colSpan={8} className="no-data">Nessun ordine{filterStatus?' con questo stato':''}.{!orders.length&&' Gli ordini arrivano quando il cliente clicca "Acquista" nel designer.'}</td></tr>}
+              {filtered.map(o=>(
+                <tr key={o.id}>
+                  <td><strong>#{o.id}</strong></td>
+                  <td>{o.product||'—'}</td>
+                  <td>
+                    <div style={{display:'flex',alignItems:'center',gap:6}}>
+                      <div style={{width:14,height:14,borderRadius:'50%',background:o.color||'#fff',border:'1px solid #e0e0e0'}}/>
+                      {o.color||'—'}
+                    </div>
+                  </td>
+                  <td>{o.size||'—'}</td>
+                  <td><strong style={{color:'#1a237e'}}>€{parseFloat(o.price||0).toFixed(2)}</strong></td>
+                  <td>
+                    <span className={`status-badge ${
+                      o.status==='Completato'?'status-completed':
+                      o.status==='In lavorazione'||o.status==='Spedito'?'status-processing':'status-pending'}`}>
+                      {o.status||'In attesa'}
+                    </span>
+                  </td>
+                  <td style={{fontSize:12,color:'#888'}}>{new Date(o.date).toLocaleDateString('it-IT')}</td>
+                  <td>
+                    <div style={{display:'flex',gap:6}}>
+                      <button className="btn-edit btn-sm" onClick={()=>setDetail(o)}><i className="fa fa-eye"></i></button>
+                      <button className="btn-danger btn-sm" onClick={()=>del(o.id)}><i className="fa fa-trash"></i></button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Settings Page ───────────────────────────────────────────────────
+function SettingsPage({ toast }) {
+  const [s, setS] = useState(() => AdminStore.get('settings') || {});
+  const upd = (k,v) => setS(x=>({...x,[k]:v}));
+  const saveSettings = () => { AdminStore.set('settings', s); toast.show('Impostazioni salvate!'); };
+
+  const resetAll = () => {
+    if (!confirm('ATTENZIONE: questo elimina tutti i dati (prodotti, clipart, template, font, ordini). Procedere?')) return;
+    ['products','cliparts','templates','fonts','categories','orders','settings'].forEach(k=>AdminStore.reset(k));
+    toast.show('Reset completato. Ricarica la pagina.','error');
+    setTimeout(()=>window.location.reload(), 1500);
+  };
+
+  return (
+    <div>
+      <div className="page-header">
+        <div>
+          <div className="page-title">Impostazioni</div>
+          <div className="page-subtitle">Configurazione generale del designer</div>
+        </div>
+        <button className="btn-primary" onClick={saveSettings}>
+          <i className="fa fa-save"></i> Salva Impostazioni
+        </button>
+      </div>
+
+      <div style={{maxWidth:720,display:'flex',flexDirection:'column',gap:18}}>
+        <div className="card">
+          <div className="card-header"><i className="fa fa-store"></i> Generale</div>
+          <div className="card-body">
+            <div className="form-row">
+              <div className="form-group">
+                <label className="form-label">Nome Store</label>
+                <input className="form-control" value={s.storeName||''} onChange={e=>upd('storeName',e.target.value)}/>
+              </div>
+              <div className="form-group">
+                <label className="form-label">URL Designer (Netlify)</label>
+                <input className="form-control" value={s.storeUrl||''} onChange={e=>upd('storeUrl',e.target.value)} placeholder="https://...netlify.app"/>
+              </div>
+            </div>
+            <div className="form-row">
+              <div className="form-group">
+                <label className="form-label">Valuta</label>
+                <select className="form-control" value={s.currency||'EUR'} onChange={e=>upd('currency',e.target.value)}>
+                  <option value="EUR">EUR – Euro</option>
+                  <option value="USD">USD – Dollaro</option>
+                  <option value="GBP">GBP – Sterlina</option>
+                </select>
+              </div>
+              <div className="form-group">
+                <label className="form-label">Simbolo Valuta</label>
+                <input className="form-control" value={s.currencySymbol||'€'} onChange={e=>upd('currencySymbol',e.target.value)} style={{maxWidth:80}}/>
+              </div>
+            </div>
+            <div className="form-group">
+              <label className="form-label">Colore Primario</label>
+              <div className="color-input-row">
+                <input type="color" value={s.primaryColor||'#3fc7ba'} onChange={e=>upd('primaryColor',e.target.value)}
+                  style={{width:40,height:32,border:'none',cursor:'pointer',background:'none',padding:0}}/>
+                <input className="form-control" value={s.primaryColor||'#3fc7ba'} onChange={e=>upd('primaryColor',e.target.value)} style={{maxWidth:120}}/>
+                <div style={{width:32,height:32,borderRadius:8,background:s.primaryColor||'#3fc7ba',border:'1px solid #e0e0e0'}}/>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div className="card">
+          <div className="card-header"><i className="fa fa-truck"></i> Fornitore POD</div>
+          <div className="card-body">
+            <div className="form-row">
+              <div className="form-group">
+                <label className="form-label">Fornitore Attivo</label>
+                <select className="form-control" value={s.podProvider||'Hoplix'} onChange={e=>upd('podProvider',e.target.value)}>
+                  <option value="Hoplix">Hoplix (attuale, no P.IVA)</option>
+                  <option value="Printful">Printful (futuro)</option>
+                  <option value="Printify">Printify (futuro)</option>
+                </select>
+              </div>
+              <div className="form-group">
+                <label className="form-label">URL Redirect Ordine</label>
+                <input className="form-control" value={s.podUrl||''} onChange={e=>upd('podUrl',e.target.value)} placeholder="https://hoplix.com/..."/>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div className="card">
+          <div className="card-header"><i className="fa fa-robot"></i> Intelligenza Artificiale</div>
+          <div className="card-body">
+            <div className="form-row">
+              <div className="form-group">
+                <label className="form-label">Servizio AI</label>
+                <select className="form-control" value={s.aiService||'pollinations'} onChange={e=>upd('aiService',e.target.value)}>
+                  <option value="pollinations">Pollinations.ai (gratuito)</option>
+                  <option value="openai">OpenAI DALL·E 3</option>
+                </select>
+              </div>
+              <div className="form-group">
+                <label className="form-label">API Key</label>
+                <input className="form-control" value={s.aiKey||''} onChange={e=>upd('aiKey',e.target.value)} placeholder="sk-... (solo per OpenAI)" type="password"/>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div className="card">
+          <div className="card-header"><i className="fa fa-image"></i> Upload Immagini</div>
+          <div className="card-body">
+            <div className="form-group">
+              <label className="form-label">Dimensione Massima (MB)</label>
+              <input className="form-control" type="number" min="1" max="50" value={s.maxUploadMB||5}
+                onChange={e=>upd('maxUploadMB',parseInt(e.target.value)||5)} style={{maxWidth:100}}/>
+            </div>
+          </div>
+        </div>
+
+        <div className="card">
+          <div className="card-header"><i className="fa fa-lock"></i> Sicurezza</div>
+          <div className="card-body">
+            <div className="form-group">
+              <label className="form-label">Password Admin</label>
+              <input className="form-control" value={s.adminPassword||'wonderspit2025'} onChange={e=>upd('adminPassword',e.target.value)} type="password" style={{maxWidth:260}}/>
+              <div className="form-hint">Usata per accedere a questa pagina admin</div>
+            </div>
+          </div>
+        </div>
+
+        <div className="card" style={{borderTop:'3px solid #e53935'}}>
+          <div className="card-header" style={{color:'#e53935'}}><i className="fa fa-exclamation-triangle"></i> Zona Pericolosa</div>
+          <div className="card-body">
+            <p style={{fontSize:13,color:'#666',marginBottom:14}}>
+              Il reset elimina <strong>tutti i dati</strong> dal localStorage: prodotti, clipart, template, font, ordini, impostazioni.
+              Il designer tornerà ai valori di default.
+            </p>
+            <button onClick={resetAll} className="btn-danger">
+              <i className="fa fa-bomb"></i> Reset completo dati
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── App Root ────────────────────────────────────────────────────────
+function App() {
+  const [logged, setLogged] = useState(() => sessionStorage.getItem('ws_admin_auth') === '1');
+  const [page, setPage] = useState('dashboard');
+  const toast = useToast();
+
+  const login = () => { sessionStorage.setItem('ws_admin_auth','1'); setLogged(true); };
+  const logout = () => { sessionStorage.removeItem('ws_admin_auth'); setLogged(false); };
+
+  if (!logged) return <LoginPage onLogin={login} />;
+
+  const PAGE_TITLES = {
+    dashboard:'Dashboard', orders:'Ordini', products:'Prodotti',
+    cliparts:'Clipart', templates:'Template', fonts:'Font',
+    categories:'Categorie', settings:'Impostazioni',
+  };
+
+  const renderPage = () => {
+    switch(page) {
+      case 'dashboard':  return <Dashboard setPage={setPage}/>;
+      case 'orders':     return <OrdersPage toast={toast}/>;
+      case 'products':   return <ProductsPage toast={toast}/>;
+      case 'cliparts':   return <ClipartsPage toast={toast}/>;
+      case 'templates':  return <TemplatesPage toast={toast}/>;
+      case 'fonts':      return <FontsPage toast={toast}/>;
+      case 'categories': return <CategoriesPage toast={toast}/>;
+      case 'settings':   return <SettingsPage toast={toast}/>;
+      default:           return <Dashboard setPage={setPage}/>;
+    }
+  };
+
+  return (
+    <div id="admin-root" style={{height:'100vh',display:'flex',flexDirection:'column'}}>
+      <div style={{display:'flex',flex:1,overflow:'hidden'}}>
+        <Sidebar page={page} setPage={setPage} onLogout={logout}/>
+        <div style={{flex:1,display:'flex',flexDirection:'column',overflow:'hidden'}}>
+          <div className="topbar">
+            <div className="topbar-title">{PAGE_TITLES[page]||'Admin'}</div>
+            <div className="topbar-right">
+              <span className="topbar-badge">v2.0</span>
+              <a href="index.html" target="_blank" className="view-site-btn">
+                <i className="fa fa-external-link-alt"></i> Apri Designer
+              </a>
+            </div>
+          </div>
+          <div className="admin-content">
+            {renderPage()}
+          </div>
+        </div>
+      </div>
+      {toast.Toast}
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById('admin-root')).render(<App/>);
+</script>
+</body>
+</html>
