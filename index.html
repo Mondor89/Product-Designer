@@ -1986,33 +1986,31 @@ function DesignerApp() {
       // Gli eventi mouse arrivano in coordinate CSS (400px) ma Fabric
       // li aspetta in coordinate fisiche (1200px) — dobbiamo scalare
       // Fabric gestisce questo automaticamente se impostiamo calcOffset
-      // ── Fix click con transform:scale ──────────────────────────
-      // Fabric calcola i click usando getBoundingClientRect del canvas element.
-      // Con transform:scale sul parent, le coordinate CSS e fisiche non corrispondono.
-      // Sovrascriviamo getPointer per correggere con il fattore scale totale.
-      const origGetPointer = canvas.getPointer.bind(canvas);
-      canvas.getPointer = function(e, ignoreZoom) {
-        // Trova il canvas element e calcola il fattore scale CSS reale
-        const canvasEl = this.getElement();
-        const rect = canvasEl.getBoundingClientRect();
-        // rect.width e la larghezza visiva CSS dopo tutti gli scale
-        // canvasEl.offsetWidth e la larghezza logica CSS (400px)
-        const cssScale = rect.width / (canvasEl.offsetWidth || 400);
-        // Coordinate del click relative al canvas, corrette per scale
-        const clientX = e.clientX || (e.touches && e.touches[0] && e.touches[0].clientX) || 0;
-        const clientY = e.clientY || (e.touches && e.touches[0] && e.touches[0].clientY) || 0;
-        const x = (clientX - rect.left) / cssScale;
-        const y = (clientY - rect.top)  / cssScale;
-        // Ora scala per HIRES: coordinate logiche Fabric (0-400)
-        const pointer = { x: x, y: y };
-        if (!ignoreZoom) {
-          const zoom = this.getZoom();
-          const vpt  = this.viewportTransform;
-          pointer.x = (pointer.x - vpt[4]) / zoom;
-          pointer.y = (pointer.y - vpt[5]) / zoom;
-        }
-        return pointer;
+      // Fabric gestisce i click correttamente se calcOffset viene chiamato
+      // con le coordinate reali del canvas nel DOM (dopo transform:scale)
+      // Usiamo un MutationObserver o polling per aggiornare l'offset
+      // ── Fix click per canvas HIRES con transform:scale ─────────
+      // Fabric usa _offset + (clientX - _offset.left) per calcolare
+      // la posizione del click nel canvas. Con transform:scale il canvas
+      // e visivamente piu piccolo ma fisicamente piu grande.
+      // Dobbiamo aggiornare _offset con le coordinate visive reali
+      // E fare in modo che Fabric non moltiplichi per HIRES internamente.
+
+      // La chiave: Fabric fa (clientX - offset.left) * (canvasWidth / clientWidth)
+      // Se clientWidth (BoundingRect) = rect.width (scalato) e canvasWidth = 1200,
+      // allora il ratio e 1200/rect.width anziche 1200/400 — questo e corretto!
+      // Fabric gestisce gia lo scale se legge BoundingClientRect correttamente.
+      // Il problema e solo che _offset viene calcolato prima che il canvas sia visibile.
+
+      const refreshOffset = () => {
+        // Forza Fabric a ricalcolare l'offset con il BoundingClientRect corrente
+        canvas.calcOffset();
       };
+      setTimeout(refreshOffset, 50);
+      setTimeout(refreshOffset, 300);
+      setTimeout(refreshOffset, 800);
+      window.addEventListener('resize', refreshOffset);
+      window.addEventListener('scroll', refreshOffset);
 
       // Aumenta dimensione controlli per renderli visibili e cliccabili
       // a scala 3x le maniglie default (13px) diventano 4px visivi — troppo piccole
