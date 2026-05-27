@@ -432,6 +432,10 @@ const AdminStore = {
       aiService: 'pollinations',
       aiKey: '',
       maxUploadMB: 5,
+      githubToken: '',
+      githubOwner: 'Mondor89',
+      githubRepo: 'Product-Designer',
+      githubBranch: 'main',
     },
   },
   _k: k => `wonderspit_${k}`,
@@ -959,11 +963,130 @@ function ProductForm({ init, onSave, onCancel }) {
   );
 }
 
+// ── GitHub Upload Utility ────────────────────────────────────────────
+async function ghUpload(token, owner, repo, branch, path, textContent, commitMsg) {
+  const headers = {
+    'Authorization': `token ${token}`,
+    'Accept': 'application/vnd.github.v3+json',
+    'Content-Type': 'application/json',
+  };
+  // Recupera SHA esistente (necessario per aggiornare un file)
+  let sha = null;
+  try {
+    const r = await fetch(`https://api.github.com/repos/${owner}/${repo}/contents/${path}?ref=${branch}`, { headers });
+    if (r.ok) { const d = await r.json(); sha = d.sha; }
+  } catch {}
+  // Codifica in base64 UTF-8 safe
+  const b64 = btoa(unescape(encodeURIComponent(textContent)));
+  const body = { message: commitMsg, content: b64, branch };
+  if (sha) body.sha = sha;
+  const res = await fetch(`https://api.github.com/repos/${owner}/${repo}/contents/${path}`, {
+    method: 'PUT', headers, body: JSON.stringify(body),
+  });
+  if (!res.ok) { const e = await res.json(); throw new Error(e.message || `GitHub error ${res.status}`); }
+  return await res.json();
+}
+
+// ── Modal Upload Clipart ─────────────────────────────────────────────
+function UploadClipartModal({ onClose, onUploaded, toast }) {
+  const [name, setName]       = useState('');
+  const [category, setCategory] = useState('custom');
+  const [svgText, setSvgText] = useState('');
+  const [preview, setPreview] = useState('');
+  const [uploading, setUploading] = useState(false);
+  const settings = AdminStore.get('settings') || {};
+
+  const onFile = e => {
+    const file = e.target.files[0];
+    if (!file) return;
+    if (!file.name.endsWith('.svg')) { toast.show('Seleziona un file .svg', 'error'); return; }
+    const autoName = file.name.replace(/\.svg$/i,'').replace(/[-_]/g,' ');
+    if (!name) setName(autoName);
+    const reader = new FileReader();
+    reader.onload = ev => { setSvgText(ev.target.result); setPreview(ev.target.result); };
+    reader.readAsText(file);
+  };
+
+  const upload = async () => {
+    if (!svgText) { toast.show('Seleziona un file SVG', 'error'); return; }
+    if (!name.trim()) { toast.show('Inserisci un nome', 'error'); return; }
+    const { githubToken, githubOwner, githubRepo, githubBranch } = settings;
+    if (!githubToken) { toast.show('Token GitHub mancante nelle Impostazioni', 'error'); return; }
+    setUploading(true);
+    const slug = name.trim().toLowerCase().replace(/\s+/g,'-').replace(/[^a-z0-9-]/g,'');
+    const filePath = `assets/cliparts/${category}/${slug}.svg`;
+    try {
+      await ghUpload(githubToken, githubOwner||'Mondor89', githubRepo||'Product-Designer',
+        githubBranch||'main', filePath, svgText, `Add clipart: ${name}`);
+      // Aggiunge anche a localStorage per usarla subito nel designer
+      const items = AdminStore.get('cliparts') || [];
+      const inner = svgText.replace(/^[\s\S]*?<svg[^>]*>/i,'').replace(/<\/svg>\s*$/i,'').trim();
+      items.push({ id: `gh_${Date.now()}`, label: name.trim(), svg: inner, category, path: filePath });
+      AdminStore.set('cliparts', items);
+      toast.show(`"${name}" caricata su GitHub! Netlify rideploya in ~2 min.`);
+      onUploaded();
+    } catch(err) {
+      toast.show(`Errore: ${err.message}`, 'error');
+    }
+    setUploading(false);
+  };
+
+  return (
+    <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,.5)',zIndex:9999,display:'flex',alignItems:'center',justifyContent:'center'}}>
+      <div style={{background:'#fff',borderRadius:14,padding:28,width:480,maxWidth:'95vw',boxShadow:'0 8px 40px rgba(0,0,0,.25)'}}>
+        <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:20}}>
+          <h3 style={{margin:0,color:'#1a237e',fontSize:18}}>Carica Clipart su GitHub</h3>
+          <button onClick={onClose} style={{background:'none',border:'none',fontSize:22,cursor:'pointer',color:'#666'}}>✕</button>
+        </div>
+
+        <div className="form-group">
+          <label className="form-label">File SVG *</label>
+          <input type="file" accept=".svg" onChange={onFile}
+            style={{display:'block',padding:'6px 0',fontSize:13}}/>
+        </div>
+
+        <div className="form-row">
+          <div className="form-group">
+            <label className="form-label">Nome clipart *</label>
+            <input className="form-control" value={name} onChange={e=>setName(e.target.value)} placeholder="Es: Stella marina"/>
+          </div>
+          <div className="form-group" style={{maxWidth:140}}>
+            <label className="form-label">Categoria / Cartella</label>
+            <input className="form-control" value={category} onChange={e=>setCategory(e.target.value.toLowerCase().replace(/\s+/g,'-'))} placeholder="custom"/>
+            <div className="form-hint">Es: sport, natura, custom</div>
+          </div>
+        </div>
+
+        {preview && (
+          <div style={{background:'#f5f5f5',borderRadius:8,padding:12,marginBottom:12,textAlign:'center'}}>
+            <div style={{fontSize:11,color:'#888',marginBottom:6}}>Anteprima</div>
+            <div dangerouslySetInnerHTML={{__html: preview}}
+              style={{maxWidth:100,maxHeight:100,margin:'0 auto',display:'block'}}/>
+            <div style={{fontSize:11,color:'#888',marginTop:4}}>
+              {`assets/cliparts/${category}/${name.toLowerCase().replace(/\s+/g,'-').replace(/[^a-z0-9-]/g,'')}.svg`}
+            </div>
+          </div>
+        )}
+
+        <div style={{display:'flex',gap:10,justifyContent:'flex-end',marginTop:16}}>
+          <button className="btn-secondary" onClick={onClose} disabled={uploading}>Annulla</button>
+          <button className="btn-primary" onClick={upload} disabled={uploading || !svgText}>
+            {uploading
+              ? <><i className="fa fa-spinner fa-spin" style={{marginRight:6}}/>Caricamento...</>
+              : <><i className="fa fa-upload" style={{marginRight:6}}/>Carica su GitHub</>}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ── Cliparts Page ───────────────────────────────────────────────────
 function ClipartsPage({ toast }) {
   const [items, setItems] = useState(() => AdminStore.get('cliparts') || []);
   const [editing, setEditing] = useState(null);
   const [search, setSearch] = useState('');
+  const [showUpload, setShowUpload] = useState(false);
   const categories = (AdminStore.get('categories')||[]).filter(c=>c.type==='clipart');
 
   const save = list => { setItems(list); AdminStore.set('cliparts', list); };
@@ -995,10 +1118,22 @@ function ClipartsPage({ toast }) {
           <div className="page-title">Clipart</div>
           <div className="page-subtitle">{items.length} clipart nella libreria</div>
         </div>
-        <button className="btn-primary" onClick={() => setEditing({ id:genId(), label:'', svg:'', category:'' })}>
-          <i className="fa fa-plus"></i> Aggiungi Clipart
-        </button>
+        <div style={{display:'flex',gap:8}}>
+          <button className="btn-secondary" onClick={() => setShowUpload(true)}>
+            <i className="fa fa-upload"></i> Carica SVG su GitHub
+          </button>
+          <button className="btn-primary" onClick={() => setEditing({ id:genId(), label:'', svg:'', category:'' })}>
+            <i className="fa fa-plus"></i> Aggiungi Clipart
+          </button>
+        </div>
       </div>
+      {showUpload && (
+        <UploadClipartModal
+          toast={toast}
+          onClose={() => setShowUpload(false)}
+          onUploaded={() => { setShowUpload(false); setItems(AdminStore.get('cliparts')||[]); }}
+        />
+      )}
 
       <div className="card">
         <div className="card-header" style={{justifyContent:'space-between'}}>
@@ -1676,6 +1811,38 @@ function SettingsPage({ toast }) {
               <label className="form-label">Password Admin</label>
               <input className="form-control" value={s.adminPassword||'wonderspit2025'} onChange={e=>upd('adminPassword',e.target.value)} type="password" style={{maxWidth:260}}/>
               <div className="form-hint">Usata per accedere a questa pagina admin</div>
+            </div>
+          </div>
+        </div>
+
+        <div className="card">
+          <div className="card-header"><i className="fa fa-github" style={{fontFamily:'sans-serif',fontWeight:900}}>GH</i> GitHub – Upload Clipart</div>
+          <div className="card-body">
+            <p style={{fontSize:12,color:'#666',marginBottom:12,lineHeight:1.5}}>
+              Inserisci il tuo <strong>Personal Access Token</strong> per caricare clipart direttamente su GitHub dall'admin.<br/>
+              Crea token su: <strong>github.com → Settings → Developer settings → Personal access tokens → Fine-grained</strong><br/>
+              Permessi necessari: <code style={{background:'#f5f5f5',padding:'1px 5px',borderRadius:3}}>Contents: Read and write</code>
+            </p>
+            <div className="form-row">
+              <div className="form-group" style={{flex:2}}>
+                <label className="form-label">Personal Access Token</label>
+                <input className="form-control" value={s.githubToken||''} onChange={e=>upd('githubToken',e.target.value)}
+                  type="password" placeholder="github_pat_... oppure ghp_..."/>
+              </div>
+            </div>
+            <div className="form-row">
+              <div className="form-group">
+                <label className="form-label">Owner (utente GitHub)</label>
+                <input className="form-control" value={s.githubOwner||'Mondor89'} onChange={e=>upd('githubOwner',e.target.value)}/>
+              </div>
+              <div className="form-group">
+                <label className="form-label">Repository</label>
+                <input className="form-control" value={s.githubRepo||'Product-Designer'} onChange={e=>upd('githubRepo',e.target.value)}/>
+              </div>
+              <div className="form-group" style={{maxWidth:110}}>
+                <label className="form-label">Branch</label>
+                <input className="form-control" value={s.githubBranch||'main'} onChange={e=>upd('githubBranch',e.target.value)}/>
+              </div>
             </div>
           </div>
         </div>
