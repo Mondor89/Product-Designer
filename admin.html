@@ -505,7 +505,6 @@ const NAV = [
   { id:'templates',   label:'Template',     icon:'fa-layer-group' },
   { id:'fonts',       label:'Font',         icon:'fa-font' },
   { id:'categories',  label:'Categorie',    icon:'fa-tags' },
-  { id:'assets_lumise', label:'Assets Lumise', icon:'fa-archive' },
   { section: 'Configurazione' },
   { id:'settings',    label:'Impostazioni', icon:'fa-sliders-h' },
 ];
@@ -1082,26 +1081,78 @@ function UploadClipartModal({ onClose, onUploaded, toast }) {
 }
 
 // ── Cliparts Page ───────────────────────────────────────────────────
+const CLIP_PAGE_SIZE = 80;
+
 function ClipartsPage({ toast }) {
-  const [items, setItems] = useState(() => AdminStore.get('cliparts') || []);
-  const [editing, setEditing] = useState(null);
-  const [search, setSearch] = useState('');
+  const [items, setItems]         = useState(() => AdminStore.get('cliparts') || []);
+  const [lumise, setLumise]       = useState([]);
+  const [editing, setEditing]     = useState(null);
+  const [search, setSearch]       = useState('');
+  const [catFilter, setCatFilter] = useState('all');
+  const [page, setPage]           = useState(0);
   const [showUpload, setShowUpload] = useState(false);
-  const categories = (AdminStore.get('categories')||[]).filter(c=>c.type==='clipart');
+  const customCats = (AdminStore.get('categories')||[]).filter(c=>c.type==='clipart');
+
+  // Carica assets Lumise da index.json
+  useEffect(() => {
+    fetch('assets/index.json')
+      .then(r => r.ok ? r.json() : null)
+      .then(d => {
+        if (!d?.cliparts?.files) return;
+        setLumise(d.cliparts.files.map(f => ({
+          id: 'lumise_' + f.name + '_' + f.cat,
+          label: f.name,
+          thumb: f.thumb || '',
+          path:  f.path,
+          category: f.cat,
+          source: 'lumise',
+          svg: '',
+        })));
+      })
+      .catch(() => {});
+  }, []);
+
+  useEffect(() => { setPage(0); }, [search, catFilter]);
 
   const save = list => { setItems(list); AdminStore.set('cliparts', list); };
-
-  const del = id => {
+  const del  = id => {
     if (!confirm('Eliminare questa clipart?')) return;
     save(items.filter(x => x.id !== id));
     toast.show('Clipart eliminata', 'error');
   };
 
-  const filtered = items.filter(c => c.label?.toLowerCase().includes(search.toLowerCase()));
+  // Categorie uniche per filtro
+  const lumiseCats = lumise.length ? [
+    { id:'set1', name:'Set 1 (3015)' },
+    { id:'set2', name:'Set 2 (434)'  },
+  ] : [];
+  const filterCats = [
+    { id:'all',            name:'Tutte' },
+    { id:'personalizzate', name:`Personalizzate (${items.length})` },
+    ...lumiseCats,
+    ...customCats.map(c => ({ id:c.name, name:c.name })),
+  ];
+
+  // Combina custom + lumise
+  const combined = [
+    ...items.map(i => ({...i, source:'custom'})),
+    ...lumise,
+  ];
+
+  const filtered = combined.filter(c => {
+    const matchS = !search || c.label.toLowerCase().includes(search.toLowerCase());
+    const matchC = catFilter === 'all'            ? true
+                 : catFilter === 'personalizzate' ? c.source === 'custom'
+                 : c.category === catFilter;
+    return matchS && matchC;
+  });
+
+  const totalPages = Math.ceil(filtered.length / CLIP_PAGE_SIZE);
+  const visible    = filtered.slice(page * CLIP_PAGE_SIZE, (page+1) * CLIP_PAGE_SIZE);
 
   if (editing !== null) return (
     <ClipArtForm
-      init={editing} categories={categories}
+      init={editing} categories={customCats}
       onSave={item => {
         const idx = items.findIndex(x => x.id === item.id);
         const list = idx >= 0 ? items.map(x => x.id===item.id?item:x) : [...items, item];
@@ -1116,55 +1167,95 @@ function ClipartsPage({ toast }) {
       <div className="page-header">
         <div>
           <div className="page-title">Clipart</div>
-          <div className="page-subtitle">{items.length} clipart nella libreria</div>
+          <div className="page-subtitle">
+            {items.length} personalizzate
+            {lumise.length > 0 && <span style={{color:'#7460ee'}}> · {lumise.length} Lumise</span>}
+          </div>
         </div>
         <div style={{display:'flex',gap:8}}>
           <button className="btn-secondary" onClick={() => setShowUpload(true)}>
-            <i className="fa fa-upload"></i> Carica SVG su GitHub
+            <i className="fa fa-upload"></i> Carica SVG
           </button>
           <button className="btn-primary" onClick={() => setEditing({ id:genId(), label:'', svg:'', category:'' })}>
-            <i className="fa fa-plus"></i> Aggiungi Clipart
+            <i className="fa fa-plus"></i> Aggiungi
           </button>
         </div>
       </div>
+
       {showUpload && (
-        <UploadClipartModal
-          toast={toast}
+        <UploadClipartModal toast={toast}
           onClose={() => setShowUpload(false)}
           onUploaded={() => { setShowUpload(false); setItems(AdminStore.get('cliparts')||[]); }}
         />
       )}
 
       <div className="card">
-        <div className="card-header" style={{justifyContent:'space-between'}}>
-          <span>Libreria Clipart</span>
-          <input
-            type="text" placeholder="Cerca clipart..." value={search}
+        <div className="card-header" style={{flexWrap:'wrap',gap:10}}>
+          {/* Filtri categoria */}
+          <div style={{display:'flex',gap:5,flexWrap:'wrap',flex:1}}>
+            {filterCats.map(c => (
+              <button key={c.id} onClick={()=>setCatFilter(c.id)}
+                style={{padding:'4px 12px',borderRadius:20,border:'none',cursor:'pointer',fontSize:12,fontWeight:600,
+                  background: catFilter===c.id ? '#3949ab' : '#e8eaf6',
+                  color:       catFilter===c.id ? '#fff'    : '#555'}}>
+                {c.name}
+              </button>
+            ))}
+          </div>
+          <input type="text" placeholder="Cerca clipart..." value={search}
             onChange={e=>setSearch(e.target.value)}
-            style={{border:'1.5px solid #e0e0e0',borderRadius:7,padding:'5px 10px',fontSize:13,outline:'none',width:200}}
-          />
+            style={{border:'1.5px solid #e0e0e0',borderRadius:7,padding:'5px 10px',fontSize:13,outline:'none',width:180}}/>
         </div>
         <div className="card-body">
+          <div style={{fontSize:12,color:'#888',marginBottom:10}}>
+            {filtered.length} risultati · pagina {page+1}/{totalPages||1}
+          </div>
           {filtered.length === 0 && <p className="no-data">Nessuna clipart trovata.</p>}
           <div className="thumb-grid">
-            {filtered.map(c => (
+            {visible.map(c => (
               <div key={c.id} className="thumb-item">
                 <div className="thumb-img">
-                  <svg viewBox="0 0 24 24" dangerouslySetInnerHTML={{__html: c.svg}}
-                    style={{color:'#333'}} />
+                  {c.source === 'lumise'
+                    ? c.thumb
+                      ? <img src={c.thumb} alt={c.label}
+                          style={{width:'100%',height:'100%',objectFit:'contain'}}
+                          onError={e=>{e.target.style.display='none';}}/>
+                      : <i className="fa fa-shapes" style={{fontSize:24,color:'#bbb'}}/>
+                    : <svg viewBox="0 0 24 24" dangerouslySetInnerHTML={{__html:c.svg}} style={{color:'#333'}}/>
+                  }
                 </div>
-                <div className="thumb-label">{c.label}</div>
-                <div className="thumb-actions">
-                  <button className="thumb-action-btn thumb-edit" onClick={() => setEditing({...c})}>
-                    <i className="fa fa-edit"></i>
-                  </button>
-                  <button className="thumb-action-btn thumb-del" onClick={() => del(c.id)}>
-                    <i className="fa fa-trash"></i>
-                  </button>
-                </div>
+                <div className="thumb-label" title={c.label}>{c.label}</div>
+                {c.source !== 'lumise' && (
+                  <div className="thumb-actions">
+                    <button className="thumb-action-btn thumb-edit" onClick={()=>setEditing({...c})}>
+                      <i className="fa fa-edit"/>
+                    </button>
+                    <button className="thumb-action-btn thumb-del" onClick={()=>del(c.id)}>
+                      <i className="fa fa-trash"/>
+                    </button>
+                  </div>
+                )}
               </div>
             ))}
           </div>
+
+          {/* Paginazione */}
+          {totalPages > 1 && (
+            <div style={{display:'flex',gap:6,justifyContent:'center',marginTop:18,flexWrap:'wrap'}}>
+              <button onClick={()=>setPage(p=>Math.max(0,p-1))} disabled={page===0}
+                style={{padding:'5px 14px',borderRadius:7,border:'1.5px solid #e0e0e0',cursor:page===0?'default':'pointer',
+                  background:page===0?'#f5f5f5':'#fff',color:page===0?'#bbb':'#333'}}>‹</button>
+              {Array.from({length:Math.min(7,totalPages)},(_,i)=>{
+                const p = totalPages<=7 ? i : Math.max(0,Math.min(totalPages-7,page-3))+i;
+                return <button key={p} onClick={()=>setPage(p)}
+                  style={{padding:'5px 11px',borderRadius:7,border:'1.5px solid #e0e0e0',cursor:'pointer',
+                    background:page===p?'#3949ab':'#fff',color:page===p?'#fff':'#333',fontWeight:page===p?700:400}}>{p+1}</button>;
+              })}
+              <button onClick={()=>setPage(p=>Math.min(totalPages-1,p+1))} disabled={page>=totalPages-1}
+                style={{padding:'5px 14px',borderRadius:7,border:'1.5px solid #e0e0e0',cursor:page>=totalPages-1?'default':'pointer',
+                  background:page>=totalPages-1?'#f5f5f5':'#fff',color:page>=totalPages-1?'#bbb':'#333'}}>›</button>
+            </div>
+          )}
         </div>
       </div>
     </div>
@@ -2043,7 +2134,7 @@ function App() {
   const PAGE_TITLES = {
     dashboard:'Dashboard', orders:'Ordini', products:'Prodotti',
     cliparts:'Clipart', templates:'Template', fonts:'Font',
-    categories:'Categorie', assets_lumise:'Assets Lumise', settings:'Impostazioni',
+    categories:'Categorie', settings:'Impostazioni',
   };
 
   const renderPage = () => {
@@ -2054,9 +2145,8 @@ function App() {
       case 'cliparts':   return <ClipartsPage toast={toast}/>;
       case 'templates':  return <TemplatesPage toast={toast}/>;
       case 'fonts':      return <FontsPage toast={toast}/>;
-      case 'categories':    return <CategoriesPage toast={toast}/>;
-      case 'assets_lumise': return <AssetsLumisePage toast={toast}/>;
-      case 'settings':      return <SettingsPage toast={toast}/>;
+      case 'categories': return <CategoriesPage toast={toast}/>;
+      case 'settings':   return <SettingsPage toast={toast}/>;
       default:           return <Dashboard setPage={setPage}/>;
     }
   };
