@@ -2688,7 +2688,7 @@ function DesignerApp() {
           {/* Stage canvas — scalato automaticamente */}
           <div className="canvas-stage"
             style={{ position:'relative',
-              width:Math.round(400*baseScale), height:Math.round(svgH*baseScale),
+              width:Math.round(400*(baseScale||1)), height:Math.round(svgH*(baseScale||1)),
               display: product ? 'block' : 'none',
               transition:'transform 0.2s',
               marginTop: isMobile ? 4 : 0,
@@ -2698,7 +2698,7 @@ function DesignerApp() {
 
             {/* Sfondo grigio Lumise — visibile fuori dalla sagoma del PNG trasparente */}
             <div style={{
-              position:'absolute', top:0, left:0, width:Math.round(400*baseScale), height:Math.round(svgH*baseScale),
+              position:'absolute', top:0, left:0, width:Math.round(400*(baseScale||1)), height:Math.round(svgH*(baseScale||1)),
               background:'#ebeced',
               boxShadow:'0 2px 16px rgba(0,0,0,0.10)',
               borderRadius:4,
@@ -2709,7 +2709,7 @@ function DesignerApp() {
             <img id="ws-mockup-img" alt=""
               style={{
                 position:"absolute", top:0, left:0,
-                width:Math.round(400*baseScale), height:Math.round(svgH*baseScale),
+                width:Math.round(400*(baseScale||1)), height:Math.round(svgH*(baseScale||1)),
                 objectFit:"fill",
                 zIndex:2, pointerEvents:"none",
                 display: product ? "block" : "none",
@@ -2736,7 +2736,7 @@ function DesignerApp() {
             <canvas id="main-canvas" style={{
             <canvas id="main-canvas" style={{
               position:'absolute', top:0, left:0, zIndex:3,
-              width:Math.round(400*baseScale), height:Math.round(svgH*baseScale),
+              width:Math.round(400*(baseScale||1)), height:Math.round(svgH*(baseScale||1)),
               background:'transparent',
             }} />
             }} />
