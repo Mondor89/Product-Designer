@@ -1986,11 +1986,33 @@ function DesignerApp() {
       // Gli eventi mouse arrivano in coordinate CSS (400px) ma Fabric
       // li aspetta in coordinate fisiche (1200px) — dobbiamo scalare
       // Fabric gestisce questo automaticamente se impostiamo calcOffset
-      // calcOffset dopo render CSS — aspetta che transform:scale sia applicato
-      // senza questo Fabric non mappa correttamente i click
-      setTimeout(() => { canvas.calcOffset(); }, 200);
-      // Richiama calcOffset anche quando la finestra cambia dimensione
-      window.addEventListener('resize', () => canvas.calcOffset());
+      // ── Fix click con transform:scale ──────────────────────────
+      // Fabric calcola i click usando getBoundingClientRect del canvas element.
+      // Con transform:scale sul parent, le coordinate CSS e fisiche non corrispondono.
+      // Sovrascriviamo getPointer per correggere con il fattore scale totale.
+      const origGetPointer = canvas.getPointer.bind(canvas);
+      canvas.getPointer = function(e, ignoreZoom) {
+        // Trova il canvas element e calcola il fattore scale CSS reale
+        const canvasEl = this.getElement();
+        const rect = canvasEl.getBoundingClientRect();
+        // rect.width e la larghezza visiva CSS dopo tutti gli scale
+        // canvasEl.offsetWidth e la larghezza logica CSS (400px)
+        const cssScale = rect.width / (canvasEl.offsetWidth || 400);
+        // Coordinate del click relative al canvas, corrette per scale
+        const clientX = e.clientX || (e.touches && e.touches[0] && e.touches[0].clientX) || 0;
+        const clientY = e.clientY || (e.touches && e.touches[0] && e.touches[0].clientY) || 0;
+        const x = (clientX - rect.left) / cssScale;
+        const y = (clientY - rect.top)  / cssScale;
+        // Ora scala per HIRES: coordinate logiche Fabric (0-400)
+        const pointer = { x: x, y: y };
+        if (!ignoreZoom) {
+          const zoom = this.getZoom();
+          const vpt  = this.viewportTransform;
+          pointer.x = (pointer.x - vpt[4]) / zoom;
+          pointer.y = (pointer.y - vpt[5]) / zoom;
+        }
+        return pointer;
+      };
 
       // Aumenta dimensione controlli per renderli visibili e cliccabili
       // a scala 3x le maniglie default (13px) diventano 4px visivi — troppo piccole
