@@ -1625,9 +1625,8 @@ function LogoButton({ isMobile, logoInputRef, logoSrc, onLogoUpload }) {
       clearInterval(progressTimer.current);
       setPressing(false);
       setProgress(0);
-      // Apri admin — naviga a #admin
-      window.location.hash = 'admin';
-      window.dispatchEvent(new HashChangeEvent('hashchange'));
+      // Apri nuovo admin panel in nuova scheda
+      window.open('admin.html', '_blank');
     }, 3000);
   };
 
