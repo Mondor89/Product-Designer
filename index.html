@@ -1815,7 +1815,7 @@ function DesignerApp() {
     // Colora mockup via canvas 2D — no CORS perché URL Netlify è same-origin
     const _cp = PRODUCTS.find(p => p.id === product) || PRODUCTS[0];
     const _side = _cp?.sides?.[sideIndex] || 'Fronte';
-    const mockupUrl = `/mockups/${_cp.id}/${_side === 'Fronte' ? 'fronte' : 'retro'}.png`;
+    const mockupUrl = `/mockups/${product}/${_side === 'Fronte' ? 'fronte' : 'retro'}.png`;
     const loadToken = Date.now();
     canvas._mockupToken = loadToken;
 
@@ -1852,15 +1852,26 @@ function DesignerApp() {
       ctx.putImageData(imageData, 0, 0);
 
       // Carica il canvas 2D colorato come fabric.Image — qualità PNG massima
-      // Mockup su img HTML — mai sfocato, non entra in Fabric
-      const mockupEl = document.getElementById('ws-mockup-img');
-      if (mockupEl && canvas._mockupToken === loadToken) {
-        mockupEl.src = offscreen.toDataURL();
-        // Rimuovi eventuali fabric.Image mockup residui
+      fabric.Image.fromURL(offscreen.toDataURL(), (fImg) => {
+        if (canvas._mockupToken !== loadToken) return;
+        // Pulizia DENTRO il callback — rimuove eventuali overlay arrivati in ritardo
         canvas.getObjects().filter(o => o._isMockupOverlay).forEach(o => canvas.remove(o));
-        canvas.backgroundColor = 'rgba(0,0,0,0)';
+        fImg.scaleToWidth(cw);
+        if (fImg.getScaledHeight() < ch) fImg.scaleToHeight(ch);
+        fImg.set({
+          left: 0, top: 0,
+          originX: 'left', originY: 'top',
+          selectable: false, evented: false,
+          hasControls: false, hasBorders: false,
+          lockMovementX: true, lockMovementY: true,
+          hoverCursor: 'default',
+          _isMockupOverlay: true,
+          _noClip: true,
+        });
+        canvas.add(fImg);
+        canvas.bringToFront(fImg);
         canvas.renderAll();
-      }
+      });
     };
     img.src = mockupUrl;
     }, 50); // delay 50ms
@@ -2689,13 +2700,7 @@ function DesignerApp() {
               zIndex:1, pointerEvents:'none',
             }} />
 
-            {/* Mockup colorato — img HTML sotto il canvas, mai sfocato */}
-            <img id="ws-mockup-img" alt=""
-              style={{
-                position:'absolute', top:0, left:0, width:400, height:svgH,
-                objectFit:'fill', zIndex:2, pointerEvents:'none',
-              }}
-            />
+            {/* Mockup colorato via pixel coloring — canvas 2D offscreen + fabric.Image */}
 
             {/* Zona stampa tratteggiata */}
             {/* Zona tratteggiata — id per toggle DOM diretto senza re-render */}
