@@ -2220,15 +2220,30 @@ function DesignerApp() {
       // ── ClipPath per oggetto — taglia solo il contenuto, non i controlli ──
       // Funzione globale per creare clipRect per ogni oggetto
       window._designerZone = zone;
-      window._makeClipRect = (z) => new fabric.Rect({
-        left: Math.round(z.left), top: Math.round(z.top),
-        width: Math.round(z.width), height: Math.round(z.height),
-        absolutePositioned: true,
-        // Bordo netto: nessun fill/stroke visibile, solo maschera
-        fill: 'transparent',
-        strokeWidth: 0,
-        stroke: null,
+      window._makeClipRect = (z) => {
+        const r = new fabric.Rect({
+          left: Math.round(z.left), top: Math.round(z.top),
+          width: Math.round(z.width), height: Math.round(z.height),
+          absolutePositioned: true,
+          fill: 'black',
+          strokeWidth: 0,
+          stroke: null,
+        });
+        // Disabilita antialiasing sul clipPath — bordo pixel-perfect
+        r._render = function(ctx) {
+          ctx.save();
+          ctx.imageSmoothingEnabled = false;
+          fabric.Rect.prototype._render.call(this, ctx);
+          ctx.restore();
+        };
+        return r;
+      };
+      // Disabilita image smoothing — bordi clipPath netti
+      canvas.on('after:render', () => {
+        const ctx = canvas.getContext();
+        if (ctx) ctx.imageSmoothingEnabled = false;
       });
+
       // Applica clipPath a ogni nuovo oggetto aggiunto
       canvas.on('object:added', (e) => {
         const obj = e.target;
