@@ -2175,41 +2175,24 @@ function DesignerApp() {
 
       // ── Zoom via CSS transform:scale sullo stage ────────────────
       // Fabric zoom rimane sempre 1 — nessun zoomToPoint.
-      // ── Zoom Fabric: setZoom + traslazione manuale per centrare ──
-      // canvas.setZoom(ratio) scala tutto Fabric (oggetti nitidi, vettoriali).
-      // Poi spostiamo il viewportTransform per tenere il centro del canvas fisso.
-      // Canvas logico 400×svgH → centro = (200, svgH/2).
+      // Lo zoom utente moltiplica il baseScale del fit schermo.
+      // Tutto scala insieme: prodotto, testo, icone, zona stampa.
       const canvasEl = canvas.getElement().parentElement;
 
+      // Applica zoom: setZoom(pct) aggiorna React state → re-render stage con scale(baseScale * pct/100)
       window._applyFabricZoom = (pct) => {
         const clamped = Math.min(200, Math.max(100, Math.round(pct)));
-        const ratio = clamped / 100;
-        const cw = canvas.getWidth();   // 400
-        const ch = canvas.getHeight();  // svgH
-        // Centro canvas in coordinate logiche
-        const cx = cw / 2;
-        const cy = ch / 2;
-        // Calcola traslazione: dopo setZoom il punto (cx,cy) deve restare al centro visivo
-        const vt = canvas.viewportTransform.slice();
-        vt[0] = ratio; vt[3] = ratio;
-        // Traslazione per tenere centro fisso: tx = cx*(1-ratio), ty = cy*(1-ratio)
-        vt[4] = cx * (1 - ratio);
-        vt[5] = cy * (1 - ratio);
-        canvas.setViewportTransform(vt);
-        canvas.calcOffset();
-        canvas.requestRenderAll();
         setZoom(clamped);
       };
 
-      // Rotella mouse → zoom Fabric nitido
+      // Rotella mouse → zoom CSS
       const onWheel = (e) => {
         e.preventDefault();
-        const cur = Math.round(canvas.getZoom() * 100);
-        window._applyFabricZoom(cur + (e.deltaY > 0 ? -8 : 8));
+        setZoom(z => Math.min(200, Math.max(100, z + (e.deltaY > 0 ? -8 : 8))));
       };
       canvasEl.addEventListener('wheel', onWheel, { passive: false });
 
-      // ── Pinch-to-zoom touch ──────────────────────────────────────
+      // ── Pinch-to-zoom touch (mobile + tablet) ───────────────────
       let lastDist = null;
       const onTouchStart = (e) => {
         if (e.touches.length === 2) lastDist = null;
@@ -2221,8 +2204,8 @@ function DesignerApp() {
         const dy = e.touches[0].clientY - e.touches[1].clientY;
         const dist = Math.sqrt(dx*dx + dy*dy);
         if (lastDist !== null) {
-          const cur = Math.round(canvas.getZoom() * 100);
-          window._applyFabricZoom(cur + (dist - lastDist) * 0.4);
+          const delta = (dist - lastDist) * 0.4;
+          setZoom(z => Math.min(200, Math.max(100, z + delta)));
           showZoomBarTemp();
         }
         lastDist = dist;
@@ -2719,7 +2702,7 @@ function DesignerApp() {
               width:400, height:svgH,
               overflow:'hidden',
               display: product ? 'block' : 'none',
-              transform:`scale(${baseScale})`,
+              transform:`scale(${baseScale * zoom / 100})`,
               willChange:'transform',
               backfaceVisibility:'hidden',
               transformOrigin:`${((zone.left + zone.width/2) / 400 * 100).toFixed(1)}% ${((zone.top + zone.height/2) / svgH * 100).toFixed(1)}%`,
