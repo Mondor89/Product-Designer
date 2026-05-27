@@ -2173,25 +2173,35 @@ function DesignerApp() {
       canvas.on('object:added', () => { DesignerHistory.save(canvas); checkBounds(); });
       canvas.on('object:removed', () => checkBounds());
 
-      // ── Zoom via Fabric zoomToPoint — oggetti nitidi ────────────
-      // Stage: transform:scale(baseScale) solo per fit schermo — fisso, non cambia con zoom.
-      // Zoom utente: canvas.zoomToPoint() centrato sulla zona stampa.
-      // canvas.calcOffset() dopo ogni zoom → click sempre calibrati.
+      // ── Zoom via CSS transform:scale sullo stage ────────────────
+      // Fabric zoom rimane sempre 1 — nessun zoomToPoint.
+      // ── Zoom Fabric: setZoom + traslazione manuale per centrare ──
+      // canvas.setZoom(ratio) scala tutto Fabric (oggetti nitidi, vettoriali).
+      // Poi spostiamo il viewportTransform per tenere il centro del canvas fisso.
+      // Canvas logico 400×svgH → centro = (200, svgH/2).
       const canvasEl = canvas.getElement().parentElement;
-
-      const _getZoneCenter = () => {
-        const z = window._designerZone || { left:135, top:115, width:130, height:160 };
-        return new fabric.Point(z.left + z.width / 2, z.top + z.height / 2);
-      };
 
       window._applyFabricZoom = (pct) => {
         const clamped = Math.min(200, Math.max(100, Math.round(pct)));
-        canvas.zoomToPoint(_getZoneCenter(), clamped / 100);
-        canvas.calcOffset(); // ricalibra coordinate click dopo zoom
+        const ratio = clamped / 100;
+        const cw = canvas.getWidth();   // 400
+        const ch = canvas.getHeight();  // svgH
+        // Centro canvas in coordinate logiche
+        const cx = cw / 2;
+        const cy = ch / 2;
+        // Calcola traslazione: dopo setZoom il punto (cx,cy) deve restare al centro visivo
+        const vt = canvas.viewportTransform.slice();
+        vt[0] = ratio; vt[3] = ratio;
+        // Traslazione per tenere centro fisso: tx = cx*(1-ratio), ty = cy*(1-ratio)
+        vt[4] = cx * (1 - ratio);
+        vt[5] = cy * (1 - ratio);
+        canvas.setViewportTransform(vt);
+        canvas.calcOffset();
+        canvas.requestRenderAll();
         setZoom(clamped);
       };
 
-      // Rotella mouse → zoomToPoint Fabric
+      // Rotella mouse → zoom Fabric nitido
       const onWheel = (e) => {
         e.preventDefault();
         const cur = Math.round(canvas.getZoom() * 100);
