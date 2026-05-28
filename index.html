@@ -927,11 +927,11 @@ function TemplatesPanel({ onAdd }) {
             {/* Thumbnail PNG se disponibile, altrimenti placeholder */}
             {t.thumb
               ? <img src={t.thumb} alt={t.name}
-                  style={{ width:'100%', height:60, objectFit:'cover', display:'block' }}
+                  style={{ width:'100%', height:80, objectFit:'contain', background:'#f0f0f0', display:'block' }}
                   onError={e => { e.target.style.display='none'; e.target.nextSibling.style.display='flex'; }}
                 />
               : null}
-            <div style={{ height:60, display: t.thumb ? 'none' : 'flex', alignItems:'center', justifyContent:'center', background:'#eee', fontSize:22 }}>⊞</div>
+            <div style={{ height:80, display: t.thumb ? 'none' : 'flex', alignItems:'center', justifyContent:'center', background:'#eee', fontSize:22 }}>⊞</div>
             <div style={{ padding:'3px 5px', fontSize:9, color:'#555', overflow:'hidden', whiteSpace:'nowrap', textOverflow:'ellipsis' }}>
               {loadingTpl===t.name ? '⏳ Carico...' : t.name.replace(/-/g,' ')}
             </div>
@@ -2700,108 +2700,137 @@ function DesignerApp() {
       });
 
     } else if (el.type === 'lumi-template') {
-      // Carica template WonderSpit (.lumi)
-      // Offset fisso ricavato dall'analisi delle coordinate reali dei file .lumi:
-      // il centro orizzontale del canvas sorgente è a x≈740, il nostro è a x=200 → offset 540
-      // il centro verticale è a y≈537, il nostro è a y≈237 → offset 300
-      const X_OFFSET = 540;
-      const Y_OFFSET = 300;
-      // scaleX/Y e fontSize non vanno scalati: il canvas prodotto sorgente è già 400px come il nostro
+      // Carica template .lumi — usa bounding-box fit dinamico per posizionare
+      // nella zona stampa indipendentemente dal canvas sorgente Lumise
 
       fetch(el.path)
         .then(r => r.ok ? r.json() : Promise.reject('fetch error'))
         .then(data => {
-          // .data è una stringa JSON — occorre parsearlo
           const parsed = JSON.parse(data.stages.lumise.data);
           const objs = parsed.objects || [];
 
-          // Raccoglie i font usati nel template e li carica da Google Fonts
+          // Filtra oggetti validi (no immagini prodotto, no localhost)
+          const validObjs = objs.filter(o =>
+            o && o.type && o.type !== 'image' &&
+            !(o.src && o.src.includes('localhost'))
+          );
+          if (validObjs.length === 0) { if (el.onDone) el.onDone(); return; }
+
+          // Raccoglie font usati e aspetta il caricamento prima di renderizzare
           const fontsUsed = [...new Set(
-            objs.filter(o => o && (o.type === 'i-text' || o.type === 'text') && o.fontFamily)
-                .map(o => o.fontFamily)
-                .filter(f => f !== 'Inter' && f !== 'Arial' && f !== 'Impact' && f !== 'Times New Roman')
+            validObjs
+              .filter(o => (o.type === 'i-text' || o.type === 'text') && o.fontFamily)
+              .map(o => o.fontFamily)
+              .filter(f => !['Inter','Arial','Impact','Times New Roman','Helvetica','Courier New','Verdana','Georgia'].includes(f))
           )];
-          if (fontsUsed.length > 0) {
+          const loadFonts = fontsUsed.length > 0 ? new Promise(resolve => {
             const link = document.createElement('link');
             link.rel = 'stylesheet';
             link.href = 'https://fonts.googleapis.com/css2?family=' +
-              fontsUsed.map(f => encodeURIComponent(f) + ':wght@400;700').join('&family=') + '&display=swap';
+              fontsUsed.map(f => encodeURIComponent(f) + ':ital,wght@0,400;0,700;1,400').join('&family=') + '&display=swap';
+            link.onload = resolve; link.onerror = resolve;
             document.head.appendChild(link);
-          }
+            setTimeout(resolve, 2000); // fallback max 2s
+          }) : Promise.resolve();
 
-          // Flag per evitare chiamate multiple a onAllDone
-          let doneCalled = false;
-          const onAllDone = () => {
-            if (doneCalled) return;
-            doneCalled = true;
-            canvas.renderAll();
-            DesignerHistory.save(canvas);
-            if (el.onDone) el.onDone();
-          };
+          loadFonts.then(() => {
+            // ── Bounding box di tutti gli oggetti nel sorgente ────────
+            let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+            validObjs.forEach(o => {
+              const ox = o.left || 0;
+              const oy = o.top  || 0;
+              // Stima dimensioni: usa width/height se presenti, altrimenti da fontSize
+              const ow = (o.width  || (o.fontSize ? (o.text||'X').length * o.fontSize * 0.6 : 100)) * (o.scaleX || 1);
+              const oh = (o.height || (o.fontSize ? o.fontSize * 1.4 : 50)) * (o.scaleY || 1);
+              const cX = o.originX === 'center';
+              const cY = o.originY === 'center';
+              minX = Math.min(minX, cX ? ox - ow/2 : ox);
+              maxX = Math.max(maxX, cX ? ox + ow/2 : ox + ow);
+              minY = Math.min(minY, cY ? oy - oh/2 : oy);
+              maxY = Math.max(maxY, cY ? oy + oh/2 : oy + oh);
+            });
+            if (!isFinite(minX)) { minX=0; maxX=400; minY=0; maxY=400; }
 
-          // Conta quanti SVG asincroni ci sono
-          let svgPending = objs.filter(o =>
-            o && o.type === 'svg' && o.src &&
-            o.src.startsWith('data:image/svg+xml;base64,')
-          ).length;
+            // ── Scala per far stare tutto nella zona stampa ───────────
+            const srcW = Math.max(maxX - minX, 10);
+            const srcH = Math.max(maxY - minY, 10);
+            const S = Math.min(
+              (zone.width  - 16) / srcW,
+              (zone.height - 16) / srcH,
+              2  // non ingrandire oltre 2×
+            );
 
-          objs.forEach(obj => {
-            if (!obj || !obj.type) return;
-            // Salta overlay prodotto (URL localhost) e immagini esterne
-            if (obj.type === 'image') return;
-            if (obj.src && obj.src.includes('localhost')) return;
+            // ── Centra nella zona stampa ──────────────────────────────
+            const srcCX = (minX + maxX) / 2;
+            const srcCY = (minY + maxY) / 2;
+            const DX = (zone.left + zone.width  / 2) - srcCX * S;
+            const DY = (zone.top  + zone.height / 2) - srcCY * S;
 
-            // Posizione: sottrae l'offset fisso — nessuna moltiplicazione
-            const nx  = (obj.left   || 0) - X_OFFSET;
-            const ny  = (obj.top    || 0) - Y_OFFSET;
-            const nsx = obj.scaleX  || 1;  // dimensioni invariate
-            const nsy = obj.scaleY  || 1;
-            const base = {
-              left: nx, top: ny,
-              angle: obj.angle || 0,
-              originX: obj.originX || 'left',
-              originY: obj.originY || 'top',
-              opacity: obj.opacity !== undefined ? obj.opacity : 1,
+            // Pulisce il canvas prima di aggiungere il template
+            canvas.clear();
+            canvas.setZoom(2); // ripristina zoom 2× dopo clear
+
+            let svgPending = validObjs.filter(o =>
+              o.type === 'svg' && o.src && o.src.startsWith('data:image/svg+xml;base64,')
+            ).length;
+            let doneCalled = false;
+            const onAllDone = () => {
+              if (doneCalled) return; doneCalled = true;
+              canvas.renderAll();
+              DesignerHistory.save(canvas);
+              if (el.onDone) el.onDone();
             };
 
-            if (obj.type === 'i-text' || obj.type === 'text') {
-              // Testo — fontSize invariato rispetto all'originale
-              const t = new fabric.IText(obj.text || '', {
-                ...base,
-                fontFamily:  obj.fontFamily  || 'Inter',
-                fontSize:    obj.fontSize    || 30,
-                fill:        obj.fill        || '#000000',
-                fontWeight:  obj.fontWeight  || 'normal',
-                fontStyle:   obj.fontStyle   || 'normal',
-                textAlign:   obj.textAlign   || 'left',
-                charSpacing: (obj.charSpacing || 0),
-                lineHeight:  obj.lineHeight  || 1.16,
-              });
-              canvas.add(t);
+            validObjs.forEach(obj => {
+              const nx  = (obj.left  || 0) * S + DX;
+              const ny  = (obj.top   || 0) * S + DY;
+              const nsx = (obj.scaleX || 1) * S;
+              const nsy = (obj.scaleY || 1) * S;
+              const base = {
+                left: nx, top: ny, scaleX: nsx, scaleY: nsy,
+                angle:   obj.angle   || 0,
+                originX: obj.originX || 'left',
+                originY: obj.originY || 'top',
+                opacity: obj.opacity !== undefined ? obj.opacity : 1,
+              };
 
-            } else if (obj.type === 'svg' && obj.src && obj.src.startsWith('data:image/svg+xml;base64,')) {
-              // SVG base64 — decode e carica su Fabric
-              try {
-                const b64 = obj.src.replace('data:image/svg+xml;base64,', '');
-                // decode UTF-8 safe
-                const svgText = decodeURIComponent(escape(atob(b64)));
-                fabric.loadSVGFromString(svgText, (objects, options) => {
-                  if (!objects || !objects.length) { svgPending--; if (svgPending <= 0) onAllDone(); return; }
-                  const group = fabric.util.groupSVGElements(objects, options);
-                  group.set({ ...base, scaleX: nsx, scaleY: nsy });
-                  canvas.add(group);
-                  svgPending--;
-                  if (svgPending <= 0) onAllDone();
+              if (obj.type === 'i-text' || obj.type === 'text') {
+                const t = new fabric.IText(obj.text || '', {
+                  ...base,
+                  fontFamily:  obj.fontFamily  || 'Arial',
+                  fontSize:    obj.fontSize    || 30,
+                  fill:        obj.fill        || '#000000',
+                  fontWeight:  obj.fontWeight  || 'normal',
+                  fontStyle:   obj.fontStyle   || 'normal',
+                  textAlign:   obj.textAlign   || 'left',
+                  charSpacing: obj.charSpacing || 0,
+                  lineHeight:  obj.lineHeight  || 1.16,
+                  strokeWidth: obj.strokeWidth || 0,
+                  stroke:      obj.stroke      || null,
                 });
-              } catch(e) {
-                svgPending--;
-                if (svgPending <= 0) onAllDone();
-              }
-            }
-          });
+                if (window._makeClipRect) t.clipPath = window._makeClipRect(window._designerZone || zone);
+                t._noClip = true;
+                canvas.add(t);
 
-          // Se non c'erano SVG asincroni, chiama done subito
-          if (svgPending === 0) onAllDone();
+              } else if (obj.type === 'svg' && obj.src && obj.src.startsWith('data:image/svg+xml;base64,')) {
+                try {
+                  const svgText = decodeURIComponent(escape(atob(obj.src.replace('data:image/svg+xml;base64,',''))));
+                  fabric.loadSVGFromString(svgText, (objects, options) => {
+                    if (!objects || !objects.length) { svgPending--; if (svgPending<=0) onAllDone(); return; }
+                    const group = fabric.util.groupSVGElements(objects, options);
+                    group.set(base);
+                    if (window._makeClipRect) group.clipPath = window._makeClipRect(window._designerZone || zone);
+                    group._noClip = true;
+                    canvas.add(group);
+                    svgPending--;
+                    if (svgPending <= 0) onAllDone();
+                  });
+                } catch(e) { svgPending--; if (svgPending<=0) onAllDone(); }
+              }
+            });
+
+            if (svgPending === 0) onAllDone();
+          });
         })
         .catch(err => {
           console.error('Errore caricamento template .lumi:', err);
