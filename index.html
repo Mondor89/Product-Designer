@@ -698,31 +698,125 @@ function UploadPanel({ onAdd }) {
 }
 
 /* ── CLIPART PANEL ───────────────────────────────────────────── */
+const CLIP_PAGE = 60;
 function ClipartPanel({ onAdd }) {
   const [q, setQ] = useSt('');
-  const [cliparts, setCliparts] = useSt(() => AdminStore.get('cliparts'));
+  const [customCliparts, setCustomCliparts] = useSt(() => AdminStore.get('cliparts'));
+  const [lumise, setLumise] = useSt([]);
+  const [catFilter, setCatFilter] = useSt('all');
+  const [page, setPage] = useSt(0);
+  const [source, setSource] = useSt('lumise'); // 'lumise' | 'custom'
 
   useEff(() => {
-    const h = ({ key }) => { if (key === 'cliparts') setCliparts(AdminStore.get('cliparts')); };
+    // Aggiorna clipart custom se cambiano da admin
+    const h = ({ key }) => { if (key === 'cliparts') setCustomCliparts(AdminStore.get('cliparts')); };
     DesignerBus.on('adminStoreUpdate', h);
     return () => DesignerBus.off('adminStoreUpdate', h);
   }, []);
 
-  const filtered = cliparts.filter(c => c.label.toLowerCase().includes(q.toLowerCase()));
+  useEff(() => {
+    // Carica clipart Lumise da index.json (tutte tranne categoria 'forme')
+    fetch('assets/index.json')
+      .then(r => r.ok ? r.json() : null)
+      .then(d => {
+        if (!d?.cliparts?.files) return;
+        setLumise(d.cliparts.files.filter(f => f.cat !== 'forme'));
+      })
+      .catch(() => {});
+  }, []);
+
+  const cats = ['all', ...Array.from(new Set(lumise.map(f => f.cat)))];
+
+  const filtered = source === 'lumise'
+    ? lumise.filter(f =>
+        (catFilter === 'all' || f.cat === catFilter) &&
+        (!q || f.name.toLowerCase().includes(q.toLowerCase())))
+    : customCliparts.filter(c => !q || c.label.toLowerCase().includes(q.toLowerCase()));
+
+  const totalPages = Math.ceil(filtered.length / CLIP_PAGE);
+  const paged = filtered.slice(page * CLIP_PAGE, (page + 1) * CLIP_PAGE);
+
+  const resetPage = () => setPage(0);
+
   return (
     <div style={lp.panel}>
-      <input placeholder="Cerca clipart..." value={q} onChange={e => setQ(e.target.value)} style={{ ...lp.input, marginBottom:10 }} />
-      <div style={{ display:'grid', gridTemplateColumns:'repeat(3,1fr)', gap:7 }}>
-        {filtered.map(c => (
-          <div key={c.id} onClick={() => onAdd({ type:'clipart', svg:c.svg })}
-            style={lp.clipCard}
-            onMouseEnter={e => { e.currentTarget.style.borderColor='#3fc7ba'; e.currentTarget.style.background='#f0faf9'; }}
-            onMouseLeave={e => { e.currentTarget.style.borderColor='#eee'; e.currentTarget.style.background='#fafafa'; }}>
-            <svg viewBox="0 0 24 24" width={34} height={34} style={{ color:'#3fc7ba' }} dangerouslySetInnerHTML={{ __html:c.svg }} />
-            <div style={{ fontSize:10, color:'#666', marginTop:3 }}>{c.label}</div>
-          </div>
+      {/* Toggle Lumise / Custom */}
+      <div style={{ display:'flex', gap:5, marginBottom:8 }}>
+        {[['lumise',`Lumise (${lumise.length})`],['custom',`Custom (${customCliparts.length})`]].map(([id,lbl]) => (
+          <button key={id} onClick={() => { setSource(id); resetPage(); setCatFilter('all'); }}
+            style={{ flex:1, padding:'5px 4px', borderRadius:6, border:'1px solid', fontFamily:'inherit', fontSize:10, cursor:'pointer',
+              background: source===id ? '#3fc7ba' : '#f5f5f5',
+              color: source===id ? '#fff' : '#555',
+              borderColor: source===id ? '#3fc7ba' : '#ddd' }}>
+            {lbl}
+          </button>
         ))}
       </div>
+
+      {/* Barra cerca */}
+      <input placeholder="Cerca..." value={q} onChange={e => { setQ(e.target.value); resetPage(); }}
+        style={{ ...lp.input, marginBottom:8 }} />
+
+      {/* Filtro categoria (solo Lumise) */}
+      {source === 'lumise' && (
+        <div style={{ display:'flex', gap:4, flexWrap:'wrap', marginBottom:8 }}>
+          {cats.map(c => (
+            <button key={c} onClick={() => { setCatFilter(c); resetPage(); }}
+              style={{ padding:'2px 7px', borderRadius:10, border:'1px solid', fontSize:9, cursor:'pointer', fontFamily:'inherit',
+                background: catFilter===c ? '#3fc7ba' : '#f5f5f5',
+                color: catFilter===c ? '#fff' : '#555',
+                borderColor: catFilter===c ? '#3fc7ba' : '#ddd' }}>
+              {c === 'all' ? 'Tutti' : c}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {/* Griglia */}
+      <div style={{ display:'grid', gridTemplateColumns:'repeat(3,1fr)', gap:6 }}>
+        {source === 'lumise'
+          ? paged.map(f => (
+              <div key={f.name + f.cat}
+                onClick={() => onAdd({ type:'clipart-url', url:f.path, label:f.name })}
+                style={{ ...lp.clipCard, padding:5 }}
+                onMouseEnter={e => { e.currentTarget.style.borderColor='#3fc7ba'; e.currentTarget.style.background='#f0faf9'; }}
+                onMouseLeave={e => { e.currentTarget.style.borderColor='#eee'; e.currentTarget.style.background='#fafafa'; }}>
+                {f.thumb
+                  ? <img src={f.thumb} alt={f.name} width={38} height={38} style={{ objectFit:'contain' }} />
+                  : <div style={{ width:38, height:38, background:'#eee', borderRadius:4 }} />
+                }
+                <div style={{ fontSize:8, color:'#666', marginTop:2, textAlign:'center', overflow:'hidden', whiteSpace:'nowrap', textOverflow:'ellipsis', width:'100%' }}>
+                  {f.name}
+                </div>
+              </div>
+            ))
+          : paged.map(c => (
+              <div key={c.id} onClick={() => onAdd({ type:'clipart', svg:c.svg })}
+                style={lp.clipCard}
+                onMouseEnter={e => { e.currentTarget.style.borderColor='#3fc7ba'; e.currentTarget.style.background='#f0faf9'; }}
+                onMouseLeave={e => { e.currentTarget.style.borderColor='#eee'; e.currentTarget.style.background='#fafafa'; }}>
+                <svg viewBox="0 0 24 24" width={34} height={34} style={{ color:'#3fc7ba' }} dangerouslySetInnerHTML={{ __html:c.svg }} />
+                <div style={{ fontSize:10, color:'#666', marginTop:3 }}>{c.label}</div>
+              </div>
+            ))
+        }
+        {paged.length === 0 && (
+          <div style={{ gridColumn:'1/-1', textAlign:'center', color:'#bbb', fontSize:12, padding:16 }}>
+            {lumise.length === 0 ? 'Carico...' : 'Nessuna clipart'}
+          </div>
+        )}
+      </div>
+
+      {/* Paginazione */}
+      {totalPages > 1 && (
+        <div style={{ display:'flex', justifyContent:'center', alignItems:'center', gap:8, marginTop:10 }}>
+          <button onClick={() => setPage(p => Math.max(0,p-1))} disabled={page===0}
+            style={{ ...lp.toggleBtn, padding:'3px 10px', opacity:page===0?0.4:1 }}>‹</button>
+          <span style={{ fontSize:10, color:'#666' }}>{page+1}/{totalPages}</span>
+          <button onClick={() => setPage(p => Math.min(totalPages-1,p+1))} disabled={page===totalPages-1}
+            style={{ ...lp.toggleBtn, padding:'3px 10px', opacity:page===totalPages-1?0.4:1 }}>›</button>
+        </div>
+      )}
     </div>
   );
 }
@@ -730,27 +824,65 @@ function ClipartPanel({ onAdd }) {
 /* ── SHAPES PANEL ────────────────────────────────────────────── */
 function ShapesPanel({ onAdd }) {
   const [fill, setFill] = useSt('#3fc7ba');
-  const [stroke, setStroke] = useSt('transparent');
-  const [sw, setSw] = useSt(0);
-  const shapes = [['rect','Rettangolo','⬛'],['rounded-rect','Arrotondato','▬'],['circle','Cerchio','🔵'],['triangle','Triangolo','🔺'],['line','Linea','➖']];
+  const [formeList, setFormeList] = useSt([]);
+  // Forme base Fabric come fallback se index.json non carica
+  const baseForme = [
+    ['rect','Rettangolo','⬛'],['rounded-rect','Arrotondato','▬'],
+    ['circle','Cerchio','⬤'],['triangle','Triangolo','🔺'],['line','Linea','➖'],
+  ];
+
+  useEff(() => {
+    // Carica le forme SVG da assets/index.json (categoria "forme")
+    fetch('assets/index.json')
+      .then(r => r.ok ? r.json() : null)
+      .then(d => {
+        if (!d?.cliparts?.files) return;
+        setFormeList(d.cliparts.files.filter(f => f.cat === 'forme'));
+      })
+      .catch(() => {});
+  }, []);
+
   return (
     <div style={lp.panel}>
-      <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:8, marginBottom:10 }}>
-        <div><label style={lp.label}>Riempimento</label>
-          <input type="color" value={fill} onChange={e => setFill(e.target.value)} style={{ ...lp.input, padding:2, height:36 }} /></div>
-        <div><label style={lp.label}>Bordo</label>
-          <input type="color" value={stroke==='transparent'?'#000000':stroke} onChange={e => setStroke(e.target.value)}
-            style={{ ...lp.input, padding:2, height:36 }} /></div>
+      {/* Selettore colore riempimento */}
+      <div style={{ marginBottom:12 }}>
+        <label style={lp.label}>Colore</label>
+        <input type="color" value={fill} onChange={e => setFill(e.target.value)}
+          style={{ ...lp.input, padding:2, height:36, cursor:'pointer' }} />
       </div>
-      <label style={lp.label}>Spessore bordo: {sw}px</label>
-      <input type="range" min={0} max={20} value={sw} onChange={e => setSw(+e.target.value)} style={{ width:'100%', marginBottom:12 }} />
-      <div style={{ display:'grid', gridTemplateColumns:'repeat(3,1fr)', gap:7 }}>
-        {shapes.map(([id,label,icon]) => (
-          <div key={id} onClick={() => onAdd({ type:'shape', shape:id, fill, stroke, strokeWidth:sw })}
+
+      {/* Forme SVG da assets/ (26 forme) */}
+      {formeList.length > 0 && (
+        <>
+          <div style={{ ...lp.sectionTitle, marginBottom:7 }}>Forme geometriche</div>
+          <div style={{ display:'grid', gridTemplateColumns:'repeat(4,1fr)', gap:6, marginBottom:14 }}>
+            {formeList.map(f => (
+              <div key={f.name}
+                onClick={() => onAdd({ type:'svg-url', url:f.path, fill })}
+                style={{ ...lp.clipCard, padding:6 }}
+                onMouseEnter={e => { e.currentTarget.style.borderColor='#3fc7ba'; e.currentTarget.style.background='#f0faf9'; }}
+                onMouseLeave={e => { e.currentTarget.style.borderColor='#eee'; e.currentTarget.style.background='#fafafa'; }}>
+                {/* SVG usato come immagine — cambia tint via CSS */}
+                <img src={f.thumb} alt={f.name} width={30} height={30}
+                  style={{ objectFit:'contain', filter:`invert(1) sepia(1) saturate(5) hue-rotate(140deg)` }} />
+                <div style={{ fontSize:9, color:'#666', marginTop:2, textAlign:'center' }}>
+                  {f.name.replace(/-/g,' ')}
+                </div>
+              </div>
+            ))}
+          </div>
+        </>
+      )}
+
+      {/* Forme base Fabric (sempre disponibili) */}
+      <div style={lp.sectionTitle}>Forme base</div>
+      <div style={{ display:'grid', gridTemplateColumns:'repeat(3,1fr)', gap:7, marginTop:7 }}>
+        {baseForme.map(([id,label,icon]) => (
+          <div key={id} onClick={() => onAdd({ type:'shape', shape:id, fill, stroke:'transparent', strokeWidth:0 })}
             style={lp.clipCard}
             onMouseEnter={e => { e.currentTarget.style.borderColor='#3fc7ba'; e.currentTarget.style.background='#f0faf9'; }}
             onMouseLeave={e => { e.currentTarget.style.borderColor='#eee'; e.currentTarget.style.background='#fafafa'; }}>
-            <span style={{ fontSize:26 }}>{icon}</span>
+            <span style={{ fontSize:24 }}>{icon}</span>
             <div style={{ fontSize:10, color:'#666', marginTop:3 }}>{label}</div>
           </div>
         ))}
@@ -761,30 +893,88 @@ function ShapesPanel({ onAdd }) {
 
 /* ── TEMPLATES PANEL ─────────────────────────────────────────── */
 function TemplatesPanel({ onAdd }) {
-  const [templates, setTemplates] = useSt(() => AdminStore.get('templates'));
+  const [lumiTemplates, setLumiTemplates] = useSt([]);
+  const [loadingTpl, setLoadingTpl] = useSt(null); // nome template in caricamento
+  const [catFilter, setCatFilter] = useSt('all');
+  const PAGE = 24;
+  const [page, setPage] = useSt(0);
 
   useEff(() => {
-    const h = ({ key }) => { if (key === 'templates') setTemplates(AdminStore.get('templates')); };
-    DesignerBus.on('adminStoreUpdate', h);
-    return () => DesignerBus.off('adminStoreUpdate', h);
+    // Carica lista template da index.json
+    fetch('assets/index.json')
+      .then(r => r.ok ? r.json() : null)
+      .then(d => {
+        if (!d?.templates?.files) return;
+        setLumiTemplates(d.templates.files);
+      })
+      .catch(() => {});
   }, []);
+
+  const cats = ['all', ...Array.from(new Set(lumiTemplates.map(t => t.cat)))];
+  const filtered = catFilter === 'all' ? lumiTemplates : lumiTemplates.filter(t => t.cat === catFilter);
+  const paged = filtered.slice(page * PAGE, (page + 1) * PAGE);
+  const totalPages = Math.ceil(filtered.length / PAGE);
+
+  const handleClick = (t) => {
+    setLoadingTpl(t.name);
+    onAdd({ type:'lumi-template', path:t.path, name:t.name, onDone:() => setLoadingTpl(null) });
+  };
 
   return (
     <div style={lp.panel}>
-      <div style={{ fontSize:11, color:'#999', marginBottom:10 }}>Scegli un template come punto di partenza:</div>
-      <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:8 }}>
-        {templates.map(t => (
-          <div key={t.id} onClick={() => onAdd({ type:'template', template:t })}
-            style={{ background:t.bg, padding:12, borderRadius:8, border:'2px solid #e0e0e0', cursor:'pointer', minHeight:72, position:'relative' }}
-            onMouseEnter={e => e.currentTarget.style.borderColor='#3fc7ba'}
-            onMouseLeave={e => e.currentTarget.style.borderColor='#e0e0e0'}>
-            {t.texts.map((txt,i) => (
-              <div key={i} style={{ color:t.colors[i%t.colors.length], fontWeight:'bold', fontSize:i===0?12:9, marginBottom:2 }}>{txt}</div>
-            ))}
-            <div style={{ position:'absolute', bottom:4, right:6, fontSize:9, opacity:0.5, color:t.colors[0] }}>{t.name}</div>
-          </div>
+      {/* Filtro categoria */}
+      <div style={{ display:'flex', gap:4, flexWrap:'wrap', marginBottom:10 }}>
+        {cats.map(c => (
+          <button key={c} onClick={() => { setCatFilter(c); setPage(0); }}
+            style={{ padding:'3px 8px', borderRadius:12, border:'1px solid', fontSize:10, cursor:'pointer', fontFamily:'inherit',
+              background: catFilter===c ? '#3fc7ba' : '#f5f5f5',
+              color: catFilter===c ? '#fff' : '#555',
+              borderColor: catFilter===c ? '#3fc7ba' : '#ddd' }}>
+            {c === 'all' ? `Tutti (${lumiTemplates.length})` : c}
+          </button>
         ))}
       </div>
+
+      {/* Griglia template */}
+      <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:7 }}>
+        {paged.map(t => (
+          <div key={t.name}
+            onClick={() => handleClick(t)}
+            style={{ borderRadius:8, border:`2px solid ${loadingTpl===t.name?'#3fc7ba':'#e0e0e0'}`,
+              cursor:'pointer', overflow:'hidden', background:'#f5f5f5',
+              opacity: loadingTpl && loadingTpl!==t.name ? 0.6 : 1, transition:'all 0.15s' }}
+            onMouseEnter={e => { if(!loadingTpl) e.currentTarget.style.borderColor='#3fc7ba'; }}
+            onMouseLeave={e => { if(!loadingTpl) e.currentTarget.style.borderColor='#e0e0e0'; }}>
+            {/* Thumbnail PNG se disponibile, altrimenti placeholder */}
+            {t.thumb
+              ? <img src={t.thumb} alt={t.name}
+                  style={{ width:'100%', height:60, objectFit:'cover', display:'block' }}
+                  onError={e => { e.target.style.display='none'; e.target.nextSibling.style.display='flex'; }}
+                />
+              : null}
+            <div style={{ height:60, display: t.thumb ? 'none' : 'flex', alignItems:'center', justifyContent:'center', background:'#eee', fontSize:22 }}>⊞</div>
+            <div style={{ padding:'3px 5px', fontSize:9, color:'#555', overflow:'hidden', whiteSpace:'nowrap', textOverflow:'ellipsis' }}>
+              {loadingTpl===t.name ? '⏳ Carico...' : t.name.replace(/-/g,' ')}
+            </div>
+          </div>
+        ))}
+        {paged.length === 0 && (
+          <div style={{ gridColumn:'1/-1', textAlign:'center', color:'#bbb', fontSize:12, padding:20 }}>
+            {lumiTemplates.length === 0 ? 'Carico template...' : 'Nessun risultato'}
+          </div>
+        )}
+      </div>
+
+      {/* Paginazione */}
+      {totalPages > 1 && (
+        <div style={{ display:'flex', justifyContent:'center', alignItems:'center', gap:8, marginTop:12 }}>
+          <button onClick={() => setPage(p => Math.max(0,p-1))} disabled={page===0}
+            style={{ ...lp.toggleBtn, padding:'4px 10px', opacity:page===0?0.4:1 }}>‹</button>
+          <span style={{ fontSize:11, color:'#666' }}>{page+1}/{totalPages}</span>
+          <button onClick={() => setPage(p => Math.min(totalPages-1,p+1))} disabled={page===totalPages-1}
+            style={{ ...lp.toggleBtn, padding:'4px 10px', opacity:page===totalPages-1?0.4:1 }}>›</button>
+        </div>
+      )}
     </div>
   );
 }
@@ -2463,6 +2653,36 @@ function DesignerApp() {
         canvas.add(group);canvas.setActiveObject(group);canvas.renderAll();
       });
 
+    } else if (el.type === 'clipart-url') {
+      // Carica clipart SVG Lumise da URL (assets/cliparts/...)
+      fabric.loadSVGFromURL(el.url, (objects, options) => {
+        if (!objects || !objects.length) return;
+        const group = fabric.util.groupSVGElements(objects, options);
+        const s = 90 / Math.max(group.width || 100, group.height || 100);
+        group.set({ left: cx, top: cy, originX: 'center', originY: 'center', scaleX: s, scaleY: s });
+        canvas.add(group); canvas.setActiveObject(group); canvas.renderAll();
+        DesignerHistory.save(canvas);
+      });
+
+    } else if (el.type === 'svg-url') {
+      // Carica SVG da URL (forme geometriche da assets/), sostituisce currentColor col colore scelto
+      fetch(el.url)
+        .then(r => r.ok ? r.text() : null)
+        .then(svgText => {
+          if (!svgText) return;
+          // Sostituisce currentColor con il colore fill selezionato
+          const colored = svgText.replace(/currentColor/g, el.fill || '#3fc7ba');
+          fabric.loadSVGFromString(colored, (objects, options) => {
+            if (!objects || !objects.length) return;
+            const group = fabric.util.groupSVGElements(objects, options);
+            const s = 90 / Math.max(group.width || 100, group.height || 100);
+            group.set({ left: cx, top: cy, originX: 'center', originY: 'center', scaleX: s, scaleY: s });
+            canvas.add(group); canvas.setActiveObject(group); canvas.renderAll();
+            DesignerHistory.save(canvas);
+          });
+        })
+        .catch(err => console.error('Errore caricamento SVG forma:', err));
+
     } else if (el.type === 'shape') {
       const opts = { left: cx, top: cy, originX: 'center', originY: 'center',
         fill: el.fill || '#3fc7ba', stroke: el.stroke || 'transparent', strokeWidth: el.strokeWidth || 0 };
@@ -2475,6 +2695,7 @@ function DesignerApp() {
       if (obj) {canvas.add(obj);canvas.setActiveObject(obj);}
 
     } else if (el.type === 'template') {
+      // Template legacy (localStorage) — mantenuto per compatibilità
       const t = el.template;
       t.texts.forEach((txt, i) => {
         canvas.add(new fabric.IText(txt, {
@@ -2483,6 +2704,100 @@ function DesignerApp() {
           fontWeight: 'bold', textAlign: 'center'
         }));
       });
+
+    } else if (el.type === 'lumi-template') {
+      // Carica template Lumise (.lumi = JSON con stages.lumise.data stringificato)
+      const ourW = canvas.getWidth();
+      const ourH = canvas.getHeight();
+      // Lumise usa canvas ~1480px di larghezza; scaliamo di conseguenza
+      const LUMI_W = 1480;
+      const scale = ourW / LUMI_W;
+
+      fetch(el.path)
+        .then(r => r.ok ? r.json() : Promise.reject('fetch error'))
+        .then(data => {
+          // data.stages.lumise.data è una stringa JSON — occorre parsearlo
+          const parsed = JSON.parse(data.stages.lumise.data);
+          const objs = parsed.objects || [];
+
+          // Flag per evitare chiamate multiple a onAllDone
+          let doneCalled = false;
+          const onAllDone = () => {
+            if (doneCalled) return;
+            doneCalled = true;
+            canvas.renderAll();
+            DesignerHistory.save(canvas);
+            if (el.onDone) el.onDone();
+          };
+
+          // Conta quanti SVG asincroni ci sono
+          let svgPending = objs.filter(o =>
+            o && o.type === 'svg' && o.src &&
+            o.src.startsWith('data:image/svg+xml;base64,')
+          ).length;
+
+          objs.forEach(obj => {
+            if (!obj || !obj.type) return;
+            // Salta overlay prodotto (URL localhost di Lumise) e immagini esterne
+            if (obj.type === 'image') return;
+            if (obj.src && obj.src.includes('localhost')) return;
+
+            // Ricalcola posizione scalata da Lumise al nostro canvas
+            const nx = (obj.left || 0) * scale;
+            const ny = (obj.top  || 0) * scale;
+            const nsx = (obj.scaleX || 1) * scale;
+            const nsy = (obj.scaleY || 1) * scale;
+            const base = {
+              left: nx, top: ny,
+              angle: obj.angle || 0,
+              originX: obj.originX || 'left',
+              originY: obj.originY || 'top',
+              opacity: obj.opacity !== undefined ? obj.opacity : 1,
+            };
+
+            if (obj.type === 'i-text' || obj.type === 'text') {
+              // Testo — fontSize scalato
+              const t = new fabric.IText(obj.text || '', {
+                ...base,
+                fontFamily:  obj.fontFamily  || 'Inter',
+                fontSize:    (obj.fontSize   || 20) * scale,
+                fill:        obj.fill        || '#000000',
+                fontWeight:  obj.fontWeight  || 'normal',
+                fontStyle:   obj.fontStyle   || 'normal',
+                textAlign:   obj.textAlign   || 'left',
+                charSpacing: (obj.charSpacing || 0),
+                lineHeight:  obj.lineHeight  || 1.16,
+              });
+              canvas.add(t);
+
+            } else if (obj.type === 'svg' && obj.src && obj.src.startsWith('data:image/svg+xml;base64,')) {
+              // SVG base64 — decode e carica su Fabric
+              try {
+                const b64 = obj.src.replace('data:image/svg+xml;base64,', '');
+                // decode UTF-8 safe
+                const svgText = decodeURIComponent(escape(atob(b64)));
+                fabric.loadSVGFromString(svgText, (objects, options) => {
+                  if (!objects || !objects.length) { svgPending--; if (svgPending <= 0) onAllDone(); return; }
+                  const group = fabric.util.groupSVGElements(objects, options);
+                  group.set({ ...base, scaleX: nsx, scaleY: nsy });
+                  canvas.add(group);
+                  svgPending--;
+                  if (svgPending <= 0) onAllDone();
+                });
+              } catch(e) {
+                svgPending--;
+                if (svgPending <= 0) onAllDone();
+              }
+            }
+          });
+
+          // Se non c'erano SVG asincroni, chiama done subito
+          if (svgPending === 0) onAllDone();
+        })
+        .catch(err => {
+          console.error('Errore caricamento template .lumi:', err);
+          if (el.onDone) el.onDone();
+        });
     }
     canvas.renderAll();
   }, [zone]);
