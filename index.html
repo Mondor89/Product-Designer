@@ -778,25 +778,23 @@ function ClipartPanel({ onAdd }) {
           ? paged.map(f => (
               <div key={f.name + f.cat}
                 onClick={() => onAdd({ type:'clipart-url', url:f.path, label:f.name })}
-                style={{ ...lp.clipCard, padding:8 }}
+                title={f.name}
+                style={{ ...lp.clipCard, padding:4 }}
                 onMouseEnter={e => { e.currentTarget.style.borderColor='#3fc7ba'; e.currentTarget.style.background='#f0faf9'; }}
                 onMouseLeave={e => { e.currentTarget.style.borderColor='#eee'; e.currentTarget.style.background='#fafafa'; }}>
                 {f.thumb
-                  ? <img src={f.thumb} alt={f.name} width={56} height={56} style={{ objectFit:'contain' }} />
-                  : <div style={{ width:56, height:56, background:'#eee', borderRadius:4 }} />
+                  ? <img src={f.thumb} alt={f.name} style={{ width:'100%', height:90, objectFit:'contain' }} />
+                  : <div style={{ width:'100%', height:90, background:'#eee', borderRadius:4 }} />
                 }
-                <div style={{ fontSize:8, color:'#666', marginTop:2, textAlign:'center', overflow:'hidden', whiteSpace:'nowrap', textOverflow:'ellipsis', width:'100%' }}>
-                  {f.name}
-                </div>
               </div>
             ))
           : paged.map(c => (
               <div key={c.id} onClick={() => onAdd({ type:'clipart', svg:c.svg })}
-                style={lp.clipCard}
+                title={c.label}
+                style={{ ...lp.clipCard, padding:4 }}
                 onMouseEnter={e => { e.currentTarget.style.borderColor='#3fc7ba'; e.currentTarget.style.background='#f0faf9'; }}
                 onMouseLeave={e => { e.currentTarget.style.borderColor='#eee'; e.currentTarget.style.background='#fafafa'; }}>
-                <svg viewBox="0 0 24 24" width={34} height={34} style={{ color:'#3fc7ba' }} dangerouslySetInnerHTML={{ __html:c.svg }} />
-                <div style={{ fontSize:10, color:'#666', marginTop:3 }}>{c.label}</div>
+                <svg viewBox="0 0 24 24" style={{ width:'100%', height:90, color:'#3fc7ba' }} dangerouslySetInnerHTML={{ __html:c.svg }} />
               </div>
             ))
         }
@@ -853,15 +851,11 @@ function ShapesPanel({ onAdd }) {
             {formeList.map(f => (
               <div key={f.name}
                 onClick={() => onAdd({ type:'svg-url', url:f.path, fill })}
-                style={{ ...lp.clipCard, padding:8 }}
+                title={f.name.replace(/-/g,' ')}
+                style={{ ...lp.clipCard, padding:4 }}
                 onMouseEnter={e => { e.currentTarget.style.borderColor='#3fc7ba'; e.currentTarget.style.background='#f0faf9'; }}
                 onMouseLeave={e => { e.currentTarget.style.borderColor='#eee'; e.currentTarget.style.background='#fafafa'; }}>
-                {/* SVG come img — currentColor → nero di default */}
-                <img src={f.thumb} alt={f.name} width={56} height={56}
-                  style={{ objectFit:'contain' }} />
-                <div style={{ fontSize:9, color:'#444', marginTop:4, textAlign:'center', fontWeight:500 }}>
-                  {f.name.replace(/-/g,' ')}
-                </div>
+                <img src={f.thumb} alt={f.name} style={{ width:'100%', height:90, objectFit:'contain' }} />
               </div>
             ))}
           </div>
@@ -920,21 +914,22 @@ function TemplatesPanel({ onAdd }) {
           <div key={t.name}
             onClick={() => handleClick(t)}
             style={{ borderRadius:8, border:`2px solid ${loadingTpl===t.name?'#3fc7ba':'#e0e0e0'}`,
-              cursor:'pointer', overflow:'hidden', background:'#f5f5f5',
+              cursor:'pointer', overflow:'hidden', background:'#f5f5f5', position:'relative',
               opacity: loadingTpl && loadingTpl!==t.name ? 0.6 : 1, transition:'all 0.15s' }}
             onMouseEnter={e => { if(!loadingTpl) e.currentTarget.style.borderColor='#3fc7ba'; }}
             onMouseLeave={e => { if(!loadingTpl) e.currentTarget.style.borderColor='#e0e0e0'; }}>
             {/* Thumbnail PNG se disponibile, altrimenti placeholder */}
             {t.thumb
               ? <img src={t.thumb} alt={t.name}
-                  style={{ width:'100%', height:100, objectFit:'contain', background:'#f8f8f8', display:'block' }}
+                  style={{ width:'100%', height:120, objectFit:'contain', background:'#f8f8f8', display:'block' }}
                   onError={e => { e.target.style.display='none'; e.target.nextSibling.style.display='flex'; }}
                 />
               : null}
-            <div style={{ height:100, display: t.thumb ? 'none' : 'flex', alignItems:'center', justifyContent:'center', background:'#eee', fontSize:22 }}>⊞</div>
-            <div style={{ padding:'3px 5px', fontSize:9, color:'#555', overflow:'hidden', whiteSpace:'nowrap', textOverflow:'ellipsis' }}>
-              {loadingTpl===t.name ? '⏳ Carico...' : t.name.replace(/-/g,' ')}
-            </div>
+            <div style={{ height:120, display: t.thumb ? 'none' : 'flex', alignItems:'center', justifyContent:'center', background:'#eee', fontSize:22 }}>⊞</div>
+            {loadingTpl===t.name && (
+              <div style={{ position:'absolute', inset:0, background:'rgba(255,255,255,0.75)',
+                display:'flex', alignItems:'center', justifyContent:'center', fontSize:20 }}>⏳</div>
+            )}
           </div>
         ))}
         {paged.length === 0 && (
@@ -1346,20 +1341,49 @@ function BottomToolbar() {
       </>}
 
       {/* ── LAYER — per tutti ─────────────────── */}
-      <div style={grp}>
-        <span style={lbl}>Layer</span>
-        <div style={{ display:'flex', gap:3 }}>
-          <button onClick={layerUp}   style={btn(false)} title="Porta avanti">↑</button>
-          <button onClick={layerDown} style={btn(false)} title="Porta indietro">↓</button>
+      {selected.type !== 'activeSelection' && (
+        <div style={grp}>
+          <span style={lbl}>Layer</span>
+          <div style={{ display:'flex', gap:3 }}>
+            <button onClick={layerUp}   style={btn(false)} title="Porta avanti">↑</button>
+            <button onClick={layerDown} style={btn(false)} title="Porta indietro">↓</button>
+          </div>
         </div>
-      </div>
+      )}
 
-      {/* ── OPACITÀ — per tutti ───────────────── */}
-      <div style={grp}>
-        <span style={lbl}>Opacità {props.opacity||100}%</span>
-        <input type="range" min={0} max={100} value={props.opacity||100}
-          onChange={e => apply('opacity', +e.target.value)} style={sliderStyle} />
-      </div>
+      {/* ── OPACITÀ — per tutti (solo singolo) ─ */}
+      {selected.type !== 'activeSelection' && (
+        <div style={grp}>
+          <span style={lbl}>Opacità {props.opacity||100}%</span>
+          <input type="range" min={0} max={100} value={props.opacity||100}
+            onChange={e => apply('opacity', +e.target.value)} style={sliderStyle} />
+        </div>
+      )}
+
+      {/* ── ELIMINA — sempre visibile ─────────── */}
+      <div style={sep} />
+      <button
+        onClick={() => {
+          const c = window.DesignerCanvas;
+          if (!c) return;
+          const objs = c.getActiveObjects();
+          if (!objs || !objs.length) return;
+          objs.forEach(o => c.remove(o));
+          c.discardActiveObject();
+          c.renderAll();
+          DesignerHistory.save(c);
+          DesignerBus.emit('selectionCleared');
+        }}
+        style={{
+          background:'rgba(231,76,60,0.15)', border:'1px solid rgba(231,76,60,0.4)',
+          color:'#e74c3c', borderRadius:6, padding: isMob?'5px 10px':'6px 12px',
+          cursor:'pointer', fontSize: isMob?12:13, fontFamily:'inherit',
+          display:'flex', alignItems:'center', gap:4, flexShrink:0,
+        }}>
+        🗑 {selected.type === 'activeSelection'
+          ? `Elimina (${selected._objects?.length||''})`
+          : 'Elimina'}
+      </button>
 
     </div>
   );
@@ -2347,8 +2371,9 @@ function DesignerApp() {
 
 
 
-      canvas.on('selection:created', (e) => DesignerBus.emit('selectionCreated', e.selected?.[0]));
-      canvas.on('selection:updated', (e) => DesignerBus.emit('selectionUpdated', e.selected?.[0]));
+      // Emette l'oggetto attivo (può essere ActiveSelection per multi-select)
+      canvas.on('selection:created', () => DesignerBus.emit('selectionCreated', canvas.getActiveObject()));
+      canvas.on('selection:updated', () => DesignerBus.emit('selectionUpdated', canvas.getActiveObject()));
       canvas.on('selection:cleared', () => DesignerBus.emit('selectionCleared'));
       canvas.on('object:modified', () => { DesignerHistory.save(canvas); checkBounds(); });
       canvas.on('object:added', () => { DesignerHistory.save(canvas); checkBounds(); });
@@ -2494,7 +2519,15 @@ function DesignerApp() {
       if ((e.ctrlKey || e.metaKey) && e.key === 'z') {e.preventDefault();DesignerHistory.undo(c);}
       if ((e.ctrlKey || e.metaKey) && e.key === 'y') {e.preventDefault();DesignerHistory.redo(c);}
       if ((e.key === 'Delete' || e.key === 'Backspace') && !['INPUT', 'TEXTAREA'].includes(document.activeElement?.tagName)) {
-        const obj = c.getActiveObject();if (obj) {c.remove(obj);c.renderAll();}
+        // Elimina tutti gli oggetti selezionati (singolo o multi-select)
+        const objs = c.getActiveObjects();
+        if (objs && objs.length > 0) {
+          objs.forEach(o => c.remove(o));
+          c.discardActiveObject();
+          c.renderAll();
+          DesignerHistory.save(c);
+          DesignerBus.emit('selectionCleared');
+        }
       }
     };
     window.addEventListener('keydown', handler);
@@ -2776,10 +2809,7 @@ function DesignerApp() {
             const DX = (zone.left + zone.width  / 2) - srcCX * S;
             const DY = (zone.top  + zone.height / 2) - srcCY * S;
 
-            // Pulisce il canvas prima di aggiungere il template
-            canvas.clear();
-            canvas.setZoom(2); // ripristina zoom 2× dopo clear
-
+            // NON pulisce canvas — il template viene aggiunto sopra al design esistente
             let svgPending = validObjs.filter(o =>
               o.type === 'svg' && o.src && o.src.startsWith('data:image/svg+xml;base64,')
             ).length;
