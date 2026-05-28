@@ -2103,9 +2103,13 @@ function DesignerApp() {
         return; // salta il check normale per curved-text
       }
       br = obj.getBoundingRect(false, true);
-      if (br.left < z.left - tol || br.top < z.top - tol ||
-          br.left + br.width > z.left + z.width + tol ||
-          br.top + br.height > z.top + z.height) {
+      // getBoundingRect con zoom 2× restituisce coordinate viewport → riporta in logiche
+      const _zoom = (window.DesignerCanvas ? window.DesignerCanvas.getZoom() : 1);
+      const brL = br.left / _zoom, brT = br.top / _zoom;
+      const brW = br.width / _zoom, brH = br.height / _zoom;
+      if (brL < z.left - tol || brT < z.top - tol ||
+          brL + brW > z.left + z.width + tol ||
+          brT + brH > z.top + z.height) {
         outside = true;
       }
       // Image quality check
@@ -2551,9 +2555,10 @@ function DesignerApp() {
         setTimeout(() => {
           canvas.renderAll();
           const br = curvedObj.getBoundingRect(false, true);
+          const zoom = canvas.getZoom(); // compensa viewportTransform 2×
           curvedObj.set({
-            left: cx - br.width  / 2,
-            top:  cy - br.height / 2,
+            left: cx - (br.width  / zoom) / 2,
+            top:  cy - (br.height / zoom) / 2,
           });
           curvedObj.setCoords();
           canvas.setActiveObject(curvedObj);
@@ -2608,9 +2613,10 @@ function DesignerApp() {
       setTimeout(() => {
         canvas.renderAll();
         const br = obj.getBoundingRect(false, true);
+        const zoom = canvas.getZoom(); // compensa viewportTransform 2×
         obj.set({
-          left: cx - br.width  / 2,
-          top:  cy - br.height / 2,
+          left: cx - (br.width  / zoom) / 2,
+          top:  cy - (br.height / zoom) / 2,
         });
         obj.setCoords();
         canvas.setActiveObject(obj);
