@@ -1363,16 +1363,25 @@ function BottomToolbar() {
         <div style={sep} />
       </>}
 
-      {/* ── COLORI SVG (clipart gruppo) ──────── */}
+      {/* ── COLORI SVG (clipart gruppo) — stile pallini Lumise ── */}
       {isSvgGroup && <>
         <div style={grp}>
           <span style={lbl}>Colori</span>
-          <div style={{ display:'flex', gap:3, flexWrap:'wrap', maxWidth: isMob?120:160 }}>
+          {/* Pallini colorati cliccabili — click apre color picker nativo */}
+          <div style={{ display:'flex', gap:5, flexWrap:'wrap', maxWidth: isMob?130:200 }}>
             {svgFills.map((fill, i) => (
-              <input key={i} type="color" value={fill}
-                title={`Colore ${i+1}: ${fill}`}
-                onChange={e => changeSvgFill(fill, e.target.value, i)}
-                style={{ ...inputColor, width:22, height:22, padding:1 }} />
+              <label key={i} title={`Colore ${i+1}: ${fill}`}
+                style={{ width:28, height:28, borderRadius:'50%',
+                  background: fill || '#cccccc',
+                  cursor:'pointer', flexShrink:0, display:'inline-block',
+                  border:'2px solid rgba(0,0,0,0.18)',
+                  boxShadow:'0 1px 4px rgba(0,0,0,0.18)',
+                  position:'relative' }}>
+                <input type="color"
+                  value={fill && fill.startsWith('#') ? fill : '#cccccc'}
+                  onChange={e => changeSvgFill(fill, e.target.value, i)}
+                  style={{ opacity:0, position:'absolute', width:0, height:0, pointerEvents:'none' }} />
+              </label>
             ))}
           </div>
         </div>
