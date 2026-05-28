@@ -927,11 +927,11 @@ function TemplatesPanel({ onAdd }) {
             {/* Thumbnail PNG se disponibile, altrimenti placeholder */}
             {t.thumb
               ? <img src={t.thumb} alt={t.name}
-                  style={{ width:'100%', height:80, objectFit:'contain', background:'#f0f0f0', display:'block' }}
+                  style={{ width:'100%', height:100, objectFit:'contain', background:'#f8f8f8', display:'block' }}
                   onError={e => { e.target.style.display='none'; e.target.nextSibling.style.display='flex'; }}
                 />
               : null}
-            <div style={{ height:80, display: t.thumb ? 'none' : 'flex', alignItems:'center', justifyContent:'center', background:'#eee', fontSize:22 }}>⊞</div>
+            <div style={{ height:100, display: t.thumb ? 'none' : 'flex', alignItems:'center', justifyContent:'center', background:'#eee', fontSize:22 }}>⊞</div>
             <div style={{ padding:'3px 5px', fontSize:9, color:'#555', overflow:'hidden', whiteSpace:'nowrap', textOverflow:'ellipsis' }}>
               {loadingTpl===t.name ? '⏳ Carico...' : t.name.replace(/-/g,' ')}
             </div>
@@ -1005,7 +1005,7 @@ function LeftPanel({ onAddElement, products, currentProduct, onProductChange, pr
 
       {/* Flyout */}
       {activeTab && (
-        <div style={{ position:'absolute', left:72, top:0, width:270, height:'100%', background:'#fff',
+        <div style={{ position:'absolute', left:72, top:0, width:300, height:'100%', background:'#fff',
           boxShadow:'4px 0 20px rgba(0,0,0,0.12)', display:'flex', flexDirection:'column',
           animation:'slideIn 0.15s ease', overflow:'hidden' }}
           onClick={e => e.stopPropagation()}>
@@ -2723,14 +2723,24 @@ function DesignerApp() {
               .map(o => o.fontFamily)
               .filter(f => !['Inter','Arial','Impact','Times New Roman','Helvetica','Courier New','Verdana','Georgia'].includes(f))
           )];
+          // Carica i font da Google Fonts e aspetta che siano pronti
+          // Nota: alcuni font Lumise sono commerciali e non disponibili su GF →
+          // il browser userà il fallback più simile disponibile
           const loadFonts = fontsUsed.length > 0 ? new Promise(resolve => {
             const link = document.createElement('link');
             link.rel = 'stylesheet';
             link.href = 'https://fonts.googleapis.com/css2?family=' +
               fontsUsed.map(f => encodeURIComponent(f) + ':ital,wght@0,400;0,700;1,400').join('&family=') + '&display=swap';
-            link.onload = resolve; link.onerror = resolve;
+            link.onload = () => {
+              // CSS caricato → aspetta che i file font siano scaricati
+              if (document.fonts && document.fonts.ready) {
+                document.fonts.ready.then(resolve);
+              } else { resolve(); }
+              setTimeout(resolve, 3000); // max 3s anche se fonts.ready non risolve
+            };
+            link.onerror = resolve;
             document.head.appendChild(link);
-            setTimeout(resolve, 2000); // fallback max 2s
+            setTimeout(resolve, 4000); // fallback assoluto 4s
           }) : Promise.resolve();
 
           loadFonts.then(() => {
