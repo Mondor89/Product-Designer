@@ -70,7 +70,7 @@ window.DesignerHistory = {
   _restore(canvas) {
     this.saving = true;
     canvas.loadFromJSON(JSON.parse(this.stack[this.index]), () => {
-      canvas.renderAll(); this.saving = false;
+      canvas.setZoom(2); canvas.renderAll(); this.saving = false;
       DesignerBus.emit('historyChange', { canUndo: this.index > 0, canRedo: this.index < this.stack.length - 1 });
       DesignerBus.emit('selectionCleared');
     });
@@ -2133,10 +2133,19 @@ function DesignerApp() {
       // ── Canvas SEMPRE 400×svgH in coordinate logiche Fabric ──────
       // CSS width/height sul <canvas> lo ridimensiona visivamente (nessun transform:scale)
       // Questo mantiene coordinate, clipPath e controlli sempre corretti
+      // Canvas 2× fisico — elimina sfocatura zoom CSS
+      // A zoom max 200%, canvas fisico 800px = schermo 800px → pixel-perfect
+      const DPR = 2;
       const canvas = new fabric.Canvas('main-canvas', {
-        width: 400, height: svgH, preserveObjectStacking: true,
+        width: 400 * DPR, height: svgH * DPR, preserveObjectStacking: true,
         backgroundColor: 'rgba(0,0,0,0)',
       });
+      canvas.setZoom(DPR); // zoom Fabric 2× compensa dimensione fisica
+      // CSS: canvas appare 400×svgH visivamente (metà del fisico)
+      canvas.lowerCanvasEl.style.width = '400px';
+      canvas.lowerCanvasEl.style.height = svgH + 'px';
+      canvas.upperCanvasEl.style.width = '400px';
+      canvas.upperCanvasEl.style.height = svgH + 'px';
       window.DesignerCanvas = canvas;
 
       // ── Forza dimensioni wrapper Fabric = 400×svgH ───────────
@@ -2458,9 +2467,9 @@ function DesignerApp() {
       const nextKey = `${newProduct}_${newSide}`;
       const nextData = sideData[nextKey];
       if (nextData) {
-        c.loadFromJSON(nextData, () => c.renderAll());
+        c.loadFromJSON(nextData, () => { c.setZoom(2); c.renderAll(); });
       } else {
-        c.clear();c.renderAll();
+        c.clear(); c.setZoom(2); c.renderAll();
       }
     }
     setProduct(newProduct);
