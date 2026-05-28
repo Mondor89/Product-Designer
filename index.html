@@ -1226,8 +1226,9 @@ function BottomToolbar() {
     width: isMob?38:44, textAlign:'center', fontFamily:'inherit', outline:'none',
   };
   const inputColor = {
-    width:26, height:26, borderRadius:5,
-    border:'2px solid rgba(255,255,255,0.18)', cursor:'pointer', padding:1, flexShrink:0,
+    width:28, height:28, borderRadius:'50%',
+    border:'2.5px solid rgba(255,255,255,0.22)', cursor:'pointer', padding:0, flexShrink:0,
+    boxShadow:'0 1px 5px rgba(0,0,0,0.3)',
   };
   const sel = {
     background:'rgba(255,255,255,0.07)', border:'1px solid rgba(255,255,255,0.12)',
@@ -1330,13 +1331,6 @@ function BottomToolbar() {
             style={{ ...sliderStyle, width:60 }} />
         </div>
 
-        {/* Colore */}
-        <div style={grp}>
-          <span style={lbl}>Colore</span>
-          <input type="color" value={props.fill&&props.fill!=='transparent'?props.fill:'#000000'}
-            onChange={e => apply('fill', e.target.value)} style={inputColor} />
-        </div>
-
         {/* B / I */}
         <div style={grp}>
           <span style={lbl}>Stile</span>
@@ -1363,47 +1357,6 @@ function BottomToolbar() {
         <div style={sep} />
       </>}
 
-      {/* ── COLORI SVG (clipart gruppo) — stile pallini Lumise ── */}
-      {isSvgGroup && <>
-        <div style={grp}>
-          <span style={lbl}>Colori</span>
-          {/* Pallini colorati cliccabili — click apre color picker nativo */}
-          <div style={{ display:'flex', gap:5, flexWrap:'wrap', maxWidth: isMob?130:200 }}>
-            {svgFills.map((fill, i) => (
-              <label key={i} title={`Colore ${i+1}: ${fill}`}
-                style={{ width:28, height:28, borderRadius:'50%',
-                  background: fill || '#cccccc',
-                  cursor:'pointer', flexShrink:0, display:'inline-block',
-                  border:'2px solid rgba(0,0,0,0.18)',
-                  boxShadow:'0 1px 4px rgba(0,0,0,0.18)',
-                  position:'relative' }}>
-                <input type="color"
-                  value={fill && fill.startsWith('#') ? fill : '#cccccc'}
-                  onChange={e => changeSvgFill(fill, e.target.value, i)}
-                  style={{ opacity:0, position:'absolute', width:0, height:0, pointerEvents:'none' }} />
-              </label>
-            ))}
-          </div>
-        </div>
-        <div style={sep} />
-      </>}
-
-      {/* ── FORMA (non SVG) ───────────────────── */}
-      {isShape && !isSvgGroup && <>
-        <div style={grp}>
-          <span style={lbl}>Riempimento</span>
-          <input type="color"
-            value={props.fill&&props.fill!=='transparent'?props.fill:'#3fc7ba'}
-            onChange={e => apply('fill', e.target.value)} style={inputColor} />
-        </div>
-        <div style={grp}>
-          <span style={lbl}>Bordo</span>
-          <input type="color"
-            value={props.stroke&&props.stroke!=='transparent'?props.stroke:'#000000'}
-            onChange={e => apply('stroke', e.target.value)} style={inputColor} />
-        </div>
-        <div style={sep} />
-      </>}
 
       {/* ── LAYER — per tutti ─────────────────── */}
       {selected.type !== 'activeSelection' && (
@@ -1441,19 +1394,129 @@ function BottomToolbar() {
         }}
         style={{
           background:'rgba(231,76,60,0.15)', border:'1px solid rgba(231,76,60,0.4)',
-          color:'#e74c3c', borderRadius:6, padding: isMob?'5px 10px':'6px 12px',
-          cursor:'pointer', fontSize: isMob?12:13, fontFamily:'inherit',
-          display:'flex', alignItems:'center', gap:4, flexShrink:0,
-        }}>
-        🗑 {selected.type === 'activeSelection'
-          ? `Elimina (${selected._objects?.length||''})`
-          : 'Elimina'}
+          color:'#e74c3c', borderRadius:'50%', padding:0,
+          cursor:'pointer', fontSize:16, fontFamily:'inherit',
+          display:'flex', alignItems:'center', justifyContent:'center',
+          width:34, height:34, flexShrink:0,
+          boxShadow:'0 1px 5px rgba(0,0,0,0.2)',
+        }}
+        title={selected.type === 'activeSelection' ? `Elimina (${selected._objects?.length||''})` : 'Elimina'}>
+        🗑
       </button>
 
     </div>
   );
 }
 
+
+// RightColorBar — barra laterale destra colori (solo desktop)
+function RightColorBar() {
+  const [selected, setSelected] = React.useState(null);
+  const [props, setProps]       = React.useState({});
+  const [svgFills, setSvgFills] = React.useState([]);
+
+  React.useEffect(() => {
+    const onSel = (obj) => {
+      setSelected(obj);
+      if (!obj) { setProps({}); setSvgFills([]); return; }
+      setProps({ fill: obj.fill || '#000000', stroke: obj.stroke || 'transparent' });
+      setSvgFills(obj.type === 'group' && obj._objects ? extractSvgFills(obj) : []);
+    };
+    const onClear = () => { setSelected(null); setProps({}); setSvgFills([]); };
+    DesignerBus.on('selectionCreated', onSel);
+    DesignerBus.on('selectionUpdated', onSel);
+    DesignerBus.on('selectionCleared', onClear);
+    return () => {
+      DesignerBus.off('selectionCreated', onSel);
+      DesignerBus.off('selectionUpdated', onSel);
+      DesignerBus.off('selectionCleared', onClear);
+    };
+  }, []);
+
+  const apply = (key, val) => {
+    const c = window.DesignerCanvas;
+    const obj = c?.getActiveObject();
+    if (!obj) return;
+    obj.set(key, val);
+    c.renderAll();
+    DesignerHistory.save(c);
+    setProps(p => ({ ...p, [key]: val }));
+  };
+
+  const changeSvgColor = (oldFill, newFill, i) => {
+    const c = window.DesignerCanvas;
+    const obj = c?.getActiveObject();
+    if (!obj?._objects) return;
+    const traverse = (o) => {
+      if (o._objects) { o._objects.forEach(traverse); return; }
+      if (o.fill === oldFill) o.set('fill', newFill);
+    };
+    obj._objects.forEach(traverse);
+    c.renderAll();
+    DesignerHistory.save(c);
+    setSvgFills(prev => { const n=[...prev]; n[i]=newFill; return n; });
+  };
+
+  if (!selected || window.innerWidth < 768) return null;
+
+  const isText     = ['i-text','text','curved-text'].includes(selected.type);
+  const isImg      = selected.type === 'image';
+  const isSvgGroup = selected.type === 'group' && svgFills.length > 0;
+  const isShape    = !isText && !isImg;
+
+  if (isImg) return null;
+
+  const Dot = ({ fill, onChange, title }) => (
+    <label title={title} style={{
+      width:26, height:26, borderRadius:'50%',
+      background: fill || '#ccc',
+      cursor:'pointer', display:'block', flexShrink:0,
+      border:'2px solid rgba(255,255,255,0.22)',
+      boxShadow:'0 1px 5px rgba(0,0,0,0.35)',
+      position:'relative',
+    }}>
+      <input type="color"
+        value={fill?.startsWith('#') ? fill : '#cccccc'}
+        onChange={e => onChange(e.target.value)}
+        style={{ opacity:0, position:'absolute', width:0, height:0, pointerEvents:'none' }} />
+    </label>
+  );
+
+  return (
+    <div style={{
+      position:'fixed', right:0, top:'50%', transform:'translateY(-50%)',
+      background:'rgba(22,26,42,0.97)',
+      borderRadius:'10px 0 0 10px',
+      padding:'14px 8px',
+      display:'flex', flexDirection:'column', alignItems:'center', gap:8,
+      zIndex:149,
+      boxShadow:'-3px 0 18px rgba(0,0,0,0.28)',
+      backdropFilter:'blur(12px)',
+      minWidth:42,
+    }}>
+      <span style={{
+        fontSize:7, color:'rgba(255,255,255,0.32)',
+        textTransform:'uppercase', letterSpacing:0.8,
+        writingMode:'vertical-rl', marginBottom:2,
+      }}>Colori</span>
+
+      {isSvgGroup && svgFills.map((fill, i) =>
+        <Dot key={i} fill={fill} onChange={v => changeSvgColor(fill, v, i)} title={`Colore ${i+1}: ${fill}`} />
+      )}
+
+      {isText && <Dot
+        fill={props.fill !== 'transparent' ? props.fill : '#000000'}
+        onChange={v => apply('fill', v)}
+        title="Colore testo"
+      />}
+
+      {isShape && !isSvgGroup && <>
+        <Dot fill={props.fill !== 'transparent' ? props.fill : '#3fc7ba'} onChange={v => apply('fill', v)} title="Riempimento" />
+        <Dot fill={props.stroke !== 'transparent' ? props.stroke : '#000000'} onChange={v => apply('stroke', v)} title="Bordo" />
+      </>}
+    </div>
+  );
+}
 
 // Mantieni RightPanel come alias vuoto per compatibilità (non renderizza nulla)
 function RightPanel() { return null; }
@@ -1463,7 +1526,7 @@ const rightStyles = {
   iconBtn: {}, toggleBtn: {}, toggleBtnOn: {}, layerBtn: {},
 };
 
-Object.assign(window, { BottomToolbar, RightPanel });
+Object.assign(window, { BottomToolbar, RightColorBar, RightPanel });
 
 
 // ═══════════════════════════════════════════════════════════════
@@ -2281,7 +2344,7 @@ function DesignerApp() {
           return true;
         },
         render: (ctx, left, top, _style, fabricObj) => {
-          const size = 22;
+          const size = 30;
           ctx.save();
           ctx.translate(left, top);
           // Quadrato rosso
@@ -2316,7 +2379,7 @@ function DesignerApp() {
           ctx.stroke();
           ctx.restore();
         },
-        cornerSize: 22,
+        cornerSize: 30,
       });
 
       // Rotazione — quadrato grigio in alto destra, freccia circolare chiara
@@ -2327,7 +2390,7 @@ function DesignerApp() {
         actionHandler: fabric.controlsUtils.rotationWithSnapping,
         actionName: 'rotate',
         render: (ctx, left, top) => {
-          const size = 22;
+          const size = 30;
           ctx.save();
           ctx.translate(left, top);
           // Sfondo quadrato arrotondato grigio scuro
@@ -2363,7 +2426,7 @@ function DesignerApp() {
           ctx.restore();
           ctx.restore();
         },
-        cornerSize: 22,
+        cornerSize: 30,
       });
 
       // Duplica — quadrato teal in basso sinistra
@@ -2383,7 +2446,7 @@ function DesignerApp() {
           return true;
         },
         render: (ctx, left, top) => {
-          const size = 22;
+          const size = 30;
           ctx.save();
           ctx.translate(left, top);
           ctx.fillStyle = '#3fc7ba';
@@ -2402,7 +2465,7 @@ function DesignerApp() {
           ctx.strokeRect(-7, -2, 8, 8);
           ctx.restore();
         },
-        cornerSize: 22,
+        cornerSize: 30,
       });
 
       // Resize proporzionale — basso destra (grigio)
@@ -2412,7 +2475,7 @@ function DesignerApp() {
         cursorStyle: 'nwse-resize',
         actionHandler: fabric.controlsUtils.scalingEqually,
         render: (ctx, left, top) => {
-          const size = 22;
+          const size = 30;
           ctx.save();
           ctx.translate(left, top);
           ctx.fillStyle = '#7f8c8d';
@@ -2430,7 +2493,7 @@ function DesignerApp() {
           ctx.beginPath(); ctx.moveTo(-5,-1); ctx.lineTo(-5,-5); ctx.lineTo(-1,-5); ctx.stroke();
           ctx.restore();
         },
-        cornerSize: 22,
+        cornerSize: 30,
       });
 
 
@@ -3256,6 +3319,7 @@ function DesignerApp() {
 
           <LayersPanel visible={showLayers} />
           <BottomToolbar />
+          <RightColorBar />
 
           {/* Preview Mask — gestita rimosso */}
 
