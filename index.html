@@ -773,17 +773,17 @@ function ClipartPanel({ onAdd }) {
       )}
 
       {/* Griglia */}
-      <div style={{ display:'grid', gridTemplateColumns:'repeat(3,1fr)', gap:6 }}>
+      <div style={{ display:'grid', gridTemplateColumns:'repeat(2,1fr)', gap:8 }}>
         {source === 'library'
           ? paged.map(f => (
               <div key={f.name + f.cat}
                 onClick={() => onAdd({ type:'clipart-url', url:f.path, label:f.name })}
-                style={{ ...lp.clipCard, padding:5 }}
+                style={{ ...lp.clipCard, padding:8 }}
                 onMouseEnter={e => { e.currentTarget.style.borderColor='#3fc7ba'; e.currentTarget.style.background='#f0faf9'; }}
                 onMouseLeave={e => { e.currentTarget.style.borderColor='#eee'; e.currentTarget.style.background='#fafafa'; }}>
                 {f.thumb
-                  ? <img src={f.thumb} alt={f.name} width={38} height={38} style={{ objectFit:'contain' }} />
-                  : <div style={{ width:38, height:38, background:'#eee', borderRadius:4 }} />
+                  ? <img src={f.thumb} alt={f.name} width={56} height={56} style={{ objectFit:'contain' }} />
+                  : <div style={{ width:56, height:56, background:'#eee', borderRadius:4 }} />
                 }
                 <div style={{ fontSize:8, color:'#666', marginTop:2, textAlign:'center', overflow:'hidden', whiteSpace:'nowrap', textOverflow:'ellipsis', width:'100%' }}>
                   {f.name}
@@ -846,10 +846,10 @@ function ShapesPanel({ onAdd }) {
           style={{ ...lp.input, padding:2, height:36, cursor:'pointer' }} />
       </div>
 
-      {/* Griglia 3 colonne — tutte le 26 forme SVG */}
+      {/* Griglia 2 colonne — tutte le 26 forme SVG */}
       {formeList.length === 0
         ? <div style={{ textAlign:'center', color:'#bbb', fontSize:12, padding:20 }}>Carico forme...</div>
-        : <div style={{ display:'grid', gridTemplateColumns:'repeat(3,1fr)', gap:8 }}>
+        : <div style={{ display:'grid', gridTemplateColumns:'repeat(2,1fr)', gap:8 }}>
             {formeList.map(f => (
               <div key={f.name}
                 onClick={() => onAdd({ type:'svg-url', url:f.path, fill })}
@@ -857,7 +857,7 @@ function ShapesPanel({ onAdd }) {
                 onMouseEnter={e => { e.currentTarget.style.borderColor='#3fc7ba'; e.currentTarget.style.background='#f0faf9'; }}
                 onMouseLeave={e => { e.currentTarget.style.borderColor='#eee'; e.currentTarget.style.background='#fafafa'; }}>
                 {/* SVG come img — currentColor → nero di default */}
-                <img src={f.thumb} alt={f.name} width={36} height={36}
+                <img src={f.thumb} alt={f.name} width={56} height={56}
                   style={{ objectFit:'contain' }} />
                 <div style={{ fontSize:9, color:'#444', marginTop:4, textAlign:'center', fontWeight:500 }}>
                   {f.name.replace(/-/g,' ')}
@@ -909,7 +909,7 @@ function TemplatesPanel({ onAdd }) {
               background: catFilter===c ? '#3fc7ba' : '#f5f5f5',
               color: catFilter===c ? '#fff' : '#555',
               borderColor: catFilter===c ? '#3fc7ba' : '#ddd' }}>
-            {c === 'all' ? `Tutti (${lumiTemplates.length})` : c}
+            {c === 'all' ? `Tutti (${templates.length})` : c}
           </button>
         ))}
       </div>
