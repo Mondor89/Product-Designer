@@ -702,10 +702,10 @@ const CLIP_PAGE = 60;
 function ClipartPanel({ onAdd }) {
   const [q, setQ] = useSt('');
   const [customCliparts, setCustomCliparts] = useSt(() => AdminStore.get('cliparts'));
-  const [lumise, setLumise] = useSt([]);
+  const [library, setLibrary] = useSt([]);
   const [catFilter, setCatFilter] = useSt('all');
   const [page, setPage] = useSt(0);
-  const [source, setSource] = useSt('lumise'); // 'lumise' | 'custom'
+  const [source, setSource] = useSt('library'); // 'library' | 'custom'
 
   useEff(() => {
     // Aggiorna clipart custom se cambiano da admin
@@ -715,20 +715,20 @@ function ClipartPanel({ onAdd }) {
   }, []);
 
   useEff(() => {
-    // Carica clipart Lumise da index.json (tutte tranne categoria 'forme')
+    // Carica clipart libreria da index.json (tutte tranne categoria 'forme')
     fetch('assets/index.json')
       .then(r => r.ok ? r.json() : null)
       .then(d => {
         if (!d?.cliparts?.files) return;
-        setLumise(d.cliparts.files.filter(f => f.cat !== 'forme'));
+        setLibrary(d.cliparts.files.filter(f => f.cat !== 'forme'));
       })
       .catch(() => {});
   }, []);
 
-  const cats = ['all', ...Array.from(new Set(lumise.map(f => f.cat)))];
+  const cats = ['all', ...Array.from(new Set(library.map(f => f.cat)))];
 
-  const filtered = source === 'lumise'
-    ? lumise.filter(f =>
+  const filtered = source === 'library'
+    ? library.filter(f =>
         (catFilter === 'all' || f.cat === catFilter) &&
         (!q || f.name.toLowerCase().includes(q.toLowerCase())))
     : customCliparts.filter(c => !q || c.label.toLowerCase().includes(q.toLowerCase()));
@@ -740,9 +740,9 @@ function ClipartPanel({ onAdd }) {
 
   return (
     <div style={lp.panel}>
-      {/* Toggle Lumise / Custom */}
+      {/* Toggle Libreria / Custom */}
       <div style={{ display:'flex', gap:5, marginBottom:8 }}>
-        {[['lumise',`Lumise (${lumise.length})`],['custom',`Custom (${customCliparts.length})`]].map(([id,lbl]) => (
+        {[['library',`Libreria (${library.length})`],['custom',`Custom (${customCliparts.length})`]].map(([id,lbl]) => (
           <button key={id} onClick={() => { setSource(id); resetPage(); setCatFilter('all'); }}
             style={{ flex:1, padding:'5px 4px', borderRadius:6, border:'1px solid', fontFamily:'inherit', fontSize:10, cursor:'pointer',
               background: source===id ? '#3fc7ba' : '#f5f5f5',
@@ -757,8 +757,8 @@ function ClipartPanel({ onAdd }) {
       <input placeholder="Cerca..." value={q} onChange={e => { setQ(e.target.value); resetPage(); }}
         style={{ ...lp.input, marginBottom:8 }} />
 
-      {/* Filtro categoria (solo Lumise) */}
-      {source === 'lumise' && (
+      {/* Filtro categoria (solo libreria) */}
+      {source === 'library' && (
         <div style={{ display:'flex', gap:4, flexWrap:'wrap', marginBottom:8 }}>
           {cats.map(c => (
             <button key={c} onClick={() => { setCatFilter(c); resetPage(); }}
@@ -774,7 +774,7 @@ function ClipartPanel({ onAdd }) {
 
       {/* Griglia */}
       <div style={{ display:'grid', gridTemplateColumns:'repeat(3,1fr)', gap:6 }}>
-        {source === 'lumise'
+        {source === 'library'
           ? paged.map(f => (
               <div key={f.name + f.cat}
                 onClick={() => onAdd({ type:'clipart-url', url:f.path, label:f.name })}
@@ -802,7 +802,7 @@ function ClipartPanel({ onAdd }) {
         }
         {paged.length === 0 && (
           <div style={{ gridColumn:'1/-1', textAlign:'center', color:'#bbb', fontSize:12, padding:16 }}>
-            {lumise.length === 0 ? 'Carico...' : 'Nessuna clipart'}
+            {library.length === 0 ? 'Carico...' : 'Nessuna clipart'}
           </div>
         )}
       </div>
@@ -823,16 +823,11 @@ function ClipartPanel({ onAdd }) {
 
 /* ── SHAPES PANEL ────────────────────────────────────────────── */
 function ShapesPanel({ onAdd }) {
-  const [fill, setFill] = useSt('#3fc7ba');
+  const [fill, setFill] = useSt('#333333');
   const [formeList, setFormeList] = useSt([]);
-  // Forme base Fabric come fallback se index.json non carica
-  const baseForme = [
-    ['rect','Rettangolo','⬛'],['rounded-rect','Arrotondato','▬'],
-    ['circle','Cerchio','⬤'],['triangle','Triangolo','🔺'],['line','Linea','➖'],
-  ];
 
   useEff(() => {
-    // Carica le forme SVG da assets/index.json (categoria "forme")
+    // Carica le 26 forme SVG da assets/index.json (categoria "forme")
     fetch('assets/index.json')
       .then(r => r.ok ? r.json() : null)
       .then(d => {
@@ -846,54 +841,38 @@ function ShapesPanel({ onAdd }) {
     <div style={lp.panel}>
       {/* Selettore colore riempimento */}
       <div style={{ marginBottom:12 }}>
-        <label style={lp.label}>Colore</label>
+        <label style={lp.label}>Colore forma</label>
         <input type="color" value={fill} onChange={e => setFill(e.target.value)}
           style={{ ...lp.input, padding:2, height:36, cursor:'pointer' }} />
       </div>
 
-      {/* Forme SVG da assets/ (26 forme) */}
-      {formeList.length > 0 && (
-        <>
-          <div style={{ ...lp.sectionTitle, marginBottom:7 }}>Forme geometriche</div>
-          <div style={{ display:'grid', gridTemplateColumns:'repeat(4,1fr)', gap:6, marginBottom:14 }}>
+      {/* Griglia 3 colonne — tutte le 26 forme SVG */}
+      {formeList.length === 0
+        ? <div style={{ textAlign:'center', color:'#bbb', fontSize:12, padding:20 }}>Carico forme...</div>
+        : <div style={{ display:'grid', gridTemplateColumns:'repeat(3,1fr)', gap:8 }}>
             {formeList.map(f => (
               <div key={f.name}
                 onClick={() => onAdd({ type:'svg-url', url:f.path, fill })}
-                style={{ ...lp.clipCard, padding:6 }}
+                style={{ ...lp.clipCard, padding:8 }}
                 onMouseEnter={e => { e.currentTarget.style.borderColor='#3fc7ba'; e.currentTarget.style.background='#f0faf9'; }}
                 onMouseLeave={e => { e.currentTarget.style.borderColor='#eee'; e.currentTarget.style.background='#fafafa'; }}>
-                {/* SVG usato come immagine — cambia tint via CSS */}
-                <img src={f.thumb} alt={f.name} width={30} height={30}
-                  style={{ objectFit:'contain', filter:`invert(1) sepia(1) saturate(5) hue-rotate(140deg)` }} />
-                <div style={{ fontSize:9, color:'#666', marginTop:2, textAlign:'center' }}>
+                {/* SVG come img — currentColor → nero di default */}
+                <img src={f.thumb} alt={f.name} width={36} height={36}
+                  style={{ objectFit:'contain' }} />
+                <div style={{ fontSize:9, color:'#444', marginTop:4, textAlign:'center', fontWeight:500 }}>
                   {f.name.replace(/-/g,' ')}
                 </div>
               </div>
             ))}
           </div>
-        </>
-      )}
-
-      {/* Forme base Fabric (sempre disponibili) */}
-      <div style={lp.sectionTitle}>Forme base</div>
-      <div style={{ display:'grid', gridTemplateColumns:'repeat(3,1fr)', gap:7, marginTop:7 }}>
-        {baseForme.map(([id,label,icon]) => (
-          <div key={id} onClick={() => onAdd({ type:'shape', shape:id, fill, stroke:'transparent', strokeWidth:0 })}
-            style={lp.clipCard}
-            onMouseEnter={e => { e.currentTarget.style.borderColor='#3fc7ba'; e.currentTarget.style.background='#f0faf9'; }}
-            onMouseLeave={e => { e.currentTarget.style.borderColor='#eee'; e.currentTarget.style.background='#fafafa'; }}>
-            <span style={{ fontSize:24 }}>{icon}</span>
-            <div style={{ fontSize:10, color:'#666', marginTop:3 }}>{label}</div>
-          </div>
-        ))}
-      </div>
+      }
     </div>
   );
 }
 
 /* ── TEMPLATES PANEL ─────────────────────────────────────────── */
 function TemplatesPanel({ onAdd }) {
-  const [lumiTemplates, setLumiTemplates] = useSt([]);
+  const [templates, setTemplates] = useSt([]);
   const [loadingTpl, setLoadingTpl] = useSt(null); // nome template in caricamento
   const [catFilter, setCatFilter] = useSt('all');
   const PAGE = 24;
@@ -905,13 +884,13 @@ function TemplatesPanel({ onAdd }) {
       .then(r => r.ok ? r.json() : null)
       .then(d => {
         if (!d?.templates?.files) return;
-        setLumiTemplates(d.templates.files);
+        setTemplates(d.templates.files);
       })
       .catch(() => {});
   }, []);
 
-  const cats = ['all', ...Array.from(new Set(lumiTemplates.map(t => t.cat)))];
-  const filtered = catFilter === 'all' ? lumiTemplates : lumiTemplates.filter(t => t.cat === catFilter);
+  const cats = ['all', ...Array.from(new Set(templates.map(t => t.cat)))];
+  const filtered = catFilter === 'all' ? templates : templates.filter(t => t.cat === catFilter);
   const paged = filtered.slice(page * PAGE, (page + 1) * PAGE);
   const totalPages = Math.ceil(filtered.length / PAGE);
 
@@ -960,7 +939,7 @@ function TemplatesPanel({ onAdd }) {
         ))}
         {paged.length === 0 && (
           <div style={{ gridColumn:'1/-1', textAlign:'center', color:'#bbb', fontSize:12, padding:20 }}>
-            {lumiTemplates.length === 0 ? 'Carico template...' : 'Nessun risultato'}
+            {templates.length === 0 ? 'Carico template...' : 'Nessun risultato'}
           </div>
         )}
       </div>
@@ -2706,19 +2685,34 @@ function DesignerApp() {
       });
 
     } else if (el.type === 'lumi-template') {
-      // Carica template Lumise (.lumi = JSON con stages.lumise.data stringificato)
-      const ourW = canvas.getWidth();
-      const ourH = canvas.getHeight();
-      // Lumise usa canvas ~1480px di larghezza; scaliamo di conseguenza
-      const LUMI_W = 1480;
-      const scale = ourW / LUMI_W;
+      // Carica template WonderSpit (.lumi)
+      // Offset fisso ricavato dall'analisi delle coordinate reali dei file .lumi:
+      // il centro orizzontale del canvas sorgente è a x≈740, il nostro è a x=200 → offset 540
+      // il centro verticale è a y≈537, il nostro è a y≈237 → offset 300
+      const X_OFFSET = 540;
+      const Y_OFFSET = 300;
+      // scaleX/Y e fontSize non vanno scalati: il canvas prodotto sorgente è già 400px come il nostro
 
       fetch(el.path)
         .then(r => r.ok ? r.json() : Promise.reject('fetch error'))
         .then(data => {
-          // data.stages.lumise.data è una stringa JSON — occorre parsearlo
+          // .data è una stringa JSON — occorre parsearlo
           const parsed = JSON.parse(data.stages.lumise.data);
           const objs = parsed.objects || [];
+
+          // Raccoglie i font usati nel template e li carica da Google Fonts
+          const fontsUsed = [...new Set(
+            objs.filter(o => o && (o.type === 'i-text' || o.type === 'text') && o.fontFamily)
+                .map(o => o.fontFamily)
+                .filter(f => f !== 'Inter' && f !== 'Arial' && f !== 'Impact' && f !== 'Times New Roman')
+          )];
+          if (fontsUsed.length > 0) {
+            const link = document.createElement('link');
+            link.rel = 'stylesheet';
+            link.href = 'https://fonts.googleapis.com/css2?family=' +
+              fontsUsed.map(f => encodeURIComponent(f) + ':wght@400;700').join('&family=') + '&display=swap';
+            document.head.appendChild(link);
+          }
 
           // Flag per evitare chiamate multiple a onAllDone
           let doneCalled = false;
@@ -2738,15 +2732,15 @@ function DesignerApp() {
 
           objs.forEach(obj => {
             if (!obj || !obj.type) return;
-            // Salta overlay prodotto (URL localhost di Lumise) e immagini esterne
+            // Salta overlay prodotto (URL localhost) e immagini esterne
             if (obj.type === 'image') return;
             if (obj.src && obj.src.includes('localhost')) return;
 
-            // Ricalcola posizione scalata da Lumise al nostro canvas
-            const nx = (obj.left || 0) * scale;
-            const ny = (obj.top  || 0) * scale;
-            const nsx = (obj.scaleX || 1) * scale;
-            const nsy = (obj.scaleY || 1) * scale;
+            // Posizione: sottrae l'offset fisso — nessuna moltiplicazione
+            const nx  = (obj.left   || 0) - X_OFFSET;
+            const ny  = (obj.top    || 0) - Y_OFFSET;
+            const nsx = obj.scaleX  || 1;  // dimensioni invariate
+            const nsy = obj.scaleY  || 1;
             const base = {
               left: nx, top: ny,
               angle: obj.angle || 0,
@@ -2756,11 +2750,11 @@ function DesignerApp() {
             };
 
             if (obj.type === 'i-text' || obj.type === 'text') {
-              // Testo — fontSize scalato
+              // Testo — fontSize invariato rispetto all'originale
               const t = new fabric.IText(obj.text || '', {
                 ...base,
                 fontFamily:  obj.fontFamily  || 'Inter',
-                fontSize:    (obj.fontSize   || 20) * scale,
+                fontSize:    obj.fontSize    || 30,
                 fill:        obj.fill        || '#000000',
                 fontWeight:  obj.fontWeight  || 'normal',
                 fontStyle:   obj.fontStyle   || 'normal',

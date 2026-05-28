@@ -177,20 +177,20 @@ button, input, select, textarea { font-family: 'Inter', sans-serif; }
 
 /* ── Tables ─────────────────────────────────────────────── */
 .table-wrap { overflow-x: auto; }
-table.lumise-table {
+table.ws-table {
   width: 100%; border-collapse: collapse; font-size: 13px;
 }
-.lumise-table th {
+.ws-table th {
   background: #f5f7ff; color: #444; font-size: 11px; font-weight: 700;
   text-transform: uppercase; letter-spacing: .5px; padding: 10px 14px;
   border-bottom: 1.5px solid #e8eaf0; text-align: left;
 }
-.lumise-table td {
+.ws-table td {
   padding: 11px 14px; border-bottom: 1px solid #f0f0f0; color: #333;
   vertical-align: middle;
 }
-.lumise-table tr:last-child td { border-bottom: none; }
-.lumise-table tr:hover td { background: #f9f9fb; }
+.ws-table tr:last-child td { border-bottom: none; }
+.ws-table tr:hover td { background: #f9f9fb; }
 .no-data { color: #aaa; font-size: 13px; text-align: center; padding: 30px; }
 
 /* ── Badge/status ───────────────────────────────────────── */
@@ -588,7 +588,7 @@ function Dashboard({ setPage }) {
           <div className="card-body">
             {recentOrders.length === 0
               ? <p className="no-data">Nessun ordine ancora.</p>
-              : <table className="lumise-table"><thead><tr>
+              : <table className="ws-table"><thead><tr>
                   <th>#ID</th><th>Prodotto</th><th>Stato</th><th>Data</th>
                 </tr></thead><tbody>
                   {recentOrders.map(o => (
@@ -734,7 +734,7 @@ function ProductsPage({ toast }) {
           />
         </div>
         <div className="table-wrap">
-          <table className="lumise-table">
+          <table className="ws-table">
             <thead><tr>
               <th>Prodotto</th><th>Colori</th><th>Taglie</th><th>Lati</th><th>Prezzo</th><th>Azioni</th>
             </tr></thead>
@@ -1085,7 +1085,7 @@ const CLIP_PAGE_SIZE = 80;
 
 function ClipartsPage({ toast }) {
   const [items, setItems]         = useState(() => AdminStore.get('cliparts') || []);
-  const [lumise, setLumise]       = useState([]);
+  const [library, setLibrary]     = useState([]);
   const [editing, setEditing]     = useState(null);
   const [search, setSearch]       = useState('');
   const [catFilter, setCatFilter] = useState('all');
@@ -1093,19 +1093,19 @@ function ClipartsPage({ toast }) {
   const [showUpload, setShowUpload] = useState(false);
   const customCats = (AdminStore.get('categories')||[]).filter(c=>c.type==='clipart');
 
-  // Carica assets Lumise da index.json
+  // Carica clipart libreria da index.json
   useEffect(() => {
     fetch('assets/index.json')
       .then(r => r.ok ? r.json() : null)
       .then(d => {
         if (!d?.cliparts?.files) return;
-        setLumise(d.cliparts.files.map(f => ({
-          id: 'lumise_' + f.name + '_' + f.cat,
+        setLibrary(d.cliparts.files.map(f => ({
+          id: 'lib_' + f.name + '_' + f.cat,
           label: f.name,
           thumb: f.thumb || '',
           path:  f.path,
           category: f.cat,
-          source: 'lumise',
+          source: 'library',
           svg: '',
         })));
       })
@@ -1122,21 +1122,21 @@ function ClipartsPage({ toast }) {
   };
 
   // Categorie uniche per filtro
-  const lumiseCats = lumise.length ? [
+  const libraryCats = library.length ? [
     { id:'set1', name:'Set 1 (3015)' },
     { id:'set2', name:'Set 2 (434)'  },
   ] : [];
   const filterCats = [
     { id:'all',            name:'Tutte' },
     { id:'personalizzate', name:`Personalizzate (${items.length})` },
-    ...lumiseCats,
+    ...libraryCats,
     ...customCats.map(c => ({ id:c.name, name:c.name })),
   ];
 
-  // Combina custom + lumise
+  // Combina custom + libreria
   const combined = [
     ...items.map(i => ({...i, source:'custom'})),
-    ...lumise,
+    ...library,
   ];
 
   const filtered = combined.filter(c => {
@@ -1169,7 +1169,7 @@ function ClipartsPage({ toast }) {
           <div className="page-title">Clipart</div>
           <div className="page-subtitle">
             {items.length} personalizzate
-            {lumise.length > 0 && <span style={{color:'#7460ee'}}> · {lumise.length} Lumise</span>}
+            {library.length > 0 && <span style={{color:'#7460ee'}}> · {library.length} in libreria</span>}
           </div>
         </div>
         <div style={{display:'flex',gap:8}}>
@@ -1215,7 +1215,7 @@ function ClipartsPage({ toast }) {
             {visible.map(c => (
               <div key={c.id} className="thumb-item">
                 <div className="thumb-img">
-                  {c.source === 'lumise'
+                  {c.source === 'library'
                     ? c.thumb
                       ? <img src={c.thumb} alt={c.label}
                           style={{width:'100%',height:'100%',objectFit:'contain'}}
@@ -1225,7 +1225,7 @@ function ClipartsPage({ toast }) {
                   }
                 </div>
                 <div className="thumb-label" title={c.label}>{c.label}</div>
-                {c.source !== 'lumise' && (
+                {c.source !== 'library' && (
                   <div className="thumb-actions">
                     <button className="thumb-action-btn thumb-edit" onClick={()=>setEditing({...c})}>
                       <i className="fa fa-edit"/>
@@ -1539,7 +1539,7 @@ function FontsPage({ toast }) {
               style={{border:'1.5px solid #e0e0e0',borderRadius:7,padding:'4px 10px',fontSize:12,outline:'none',width:140}}/>
           </div>
           <div className="table-wrap">
-            <table className="lumise-table">
+            <table className="ws-table">
               <thead><tr><th>Font</th><th>Anteprima</th><th></th></tr></thead>
               <tbody>
                 {filtered.length===0 && <tr><td colSpan={3} className="no-data">Nessun font.</td></tr>}
@@ -1615,7 +1615,7 @@ function CategoriesPage({ toast }) {
         <div className="card">
           <div className="card-header">Lista Categorie ({items.length})</div>
           <div className="table-wrap">
-            <table className="lumise-table">
+            <table className="ws-table">
               <thead><tr><th>Nome</th><th>Tipo</th><th>Azioni</th></tr></thead>
               <tbody>
                 {items.length===0 && <tr><td colSpan={3} className="no-data">Nessuna categoria.</td></tr>}
@@ -1686,7 +1686,7 @@ function OrdersPage({ toast }) {
               <h3 style={{color:'#1a237e'}}>Ordine #{detail.id}</h3>
               <button onClick={()=>setDetail(null)} style={{background:'none',border:'none',cursor:'pointer',fontSize:20,color:'#aaa'}}>✕</button>
             </div>
-            <table className="lumise-table" style={{marginBottom:16}}>
+            <table className="ws-table" style={{marginBottom:16}}>
               <tbody>
                 {[['Prodotto',detail.product],['Colore',detail.color],['Taglia',detail.size],
                   ['Lato',detail.side],['Prezzo',`€${parseFloat(detail.price||0).toFixed(2)}`],
@@ -1731,7 +1731,7 @@ function OrdersPage({ toast }) {
           </div>
         </div>
         <div className="table-wrap">
-          <table className="lumise-table">
+          <table className="ws-table">
             <thead><tr>
               <th>#ID</th><th>Prodotto</th><th>Colore</th><th>Taglia</th><th>Prezzo</th><th>Stato</th><th>Data</th><th>Azioni</th>
             </tr></thead>
@@ -1955,8 +1955,11 @@ function SettingsPage({ toast }) {
   );
 }
 
-// ── Assets Lumise Page ──────────────────────────────────────────────
-function AssetsLumisePage({ toast }) {
+// AssetsLumisePage rimossa — assets integrati nelle pagine Clipart e Template
+
+function AssetsLumisePage({ toast }) { return null; } // placeholder vuoto
+
+function _AssetsLumisePageOLD({ toast }) {
   const [index, setIndex]     = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError]     = useState('');
