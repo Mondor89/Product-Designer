@@ -366,6 +366,85 @@ table.ws-table {
 .toast.error { background: rgba(229,57,53,0.2); border-color: rgba(229,57,53,0.4); color: #ef9a9a; }
 .toast.success { background: rgba(46,125,50,0.2); border-color: rgba(76,175,80,0.4); color: #66bb6a; }
 @keyframes slideInToast { from { opacity:0; transform:translateY(10px); } to { opacity:1; transform:translateY(0); } }
+
+/* ── Hamburger (solo mobile) ────────────────────────────── */
+.hamburger-btn {
+  display: none; background: none; border: none; color: #e8eaf2;
+  font-size: 18px; cursor: pointer; padding: 4px 8px; border-radius: 6px;
+  flex-shrink: 0;
+}
+.hamburger-btn:hover { background: rgba(255,255,255,0.08); }
+
+/* ── Overlay sidebar mobile ─────────────────────────────── */
+.sidebar-overlay {
+  display: none; position: fixed; inset: 0;
+  background: rgba(0,0,0,0.55); z-index: 199;
+}
+
+/* ── Responsive ─────────────────────────────────────────── */
+@media (max-width: 768px) {
+  body { overflow: auto; }
+
+  /* Sidebar: si nasconde e scivola dentro */
+  .sidebar {
+    position: fixed; left: -240px; top: 0; height: 100vh;
+    z-index: 200; transition: left 0.25s ease;
+    box-shadow: 4px 0 24px rgba(0,0,0,0.5);
+  }
+  .sidebar.open { left: 0; }
+  .sidebar-overlay { display: block; }
+
+  /* Layout: rimuove overflow hidden per scroll */
+  .admin-wrap { overflow: auto; }
+  .right-panel { overflow: auto; }
+
+  /* Topbar compatta */
+  .topbar { padding: 0 14px; }
+  .topbar-badge { display: none; }
+  .topbar-title { font-size: 15px; }
+  .hamburger-btn { display: flex; align-items: center; }
+  .view-site-btn .btn-label { display: none; }
+
+  /* Content: padding ridotto */
+  .admin-content { padding: 14px 12px; overflow: auto; }
+
+  /* Stats: 2 colonne */
+  .stats-row { grid-template-columns: repeat(2,1fr); gap: 10px; margin-bottom: 14px; }
+  .stat-value { font-size: 20px; }
+  .stat-box { padding: 12px 14px; gap: 10px; }
+  .stat-icon { width: 36px; height: 36px; }
+  .stat-icon i { font-size: 14px; }
+
+  /* Dashboard grids: 1 colonna */
+  .dash-row { grid-template-columns: 1fr; }
+
+  /* Forms: 1 colonna */
+  .form-row { grid-template-columns: 1fr; }
+  .product-mockup-grid { grid-template-columns: 1fr; }
+  .print-zone-grid { grid-template-columns: 1fr; }
+
+  /* Page header compatto */
+  .page-header { flex-wrap: wrap; gap: 10px; margin-bottom: 14px; }
+  .page-title { font-size: 16px; }
+
+  /* Thumb grid: più colonne strette */
+  .thumb-grid { grid-template-columns: repeat(auto-fill, minmax(90px,1fr)); gap: 8px; }
+
+  /* Search bar */
+  .search-bar input { max-width: 100%; }
+
+  /* Card padding */
+  .card-body { padding: 14px 16px; }
+  .card-header { padding: 11px 16px; font-size: 13px; }
+
+  /* Bottoni azione nel topbar */
+  .btn-primary span, .btn-secondary span { display: none; }
+}
+
+@media (max-width: 420px) {
+  .stats-row { grid-template-columns: 1fr 1fr; gap: 8px; }
+  .admin-content { padding: 10px; }
+}
 </style>
 </head>
 <body>
@@ -517,9 +596,9 @@ const NAV = [
   { id:'settings',    label:'Impostazioni', icon:'fa-sliders-h' },
 ];
 
-function Sidebar({ page, setPage, onLogout }) {
+function Sidebar({ page, setPage, onLogout, open }) {
   return (
-    <div className="sidebar">
+    <div className={`sidebar${open ? ' open' : ''}`}>
       <div className="sidebar-logo">
         <div className="sidebar-logo-icon"><i className="fa fa-magic"></i></div>
         <div>
@@ -2133,11 +2212,12 @@ function _AssetsLumisePageOLD({ toast }) {
 
 // ── App Root ────────────────────────────────────────────────────────
 function App() {
-  const [logged, setLogged] = useState(() => sessionStorage.getItem('ws_admin_auth') === '1');
-  const [page, setPage] = useState('dashboard');
+  const [logged, setLogged]         = useState(() => sessionStorage.getItem('ws_admin_auth') === '1');
+  const [page, setPage]             = useState('dashboard');
+  const [sidebarOpen, setSidebarOpen] = useState(false);
   const toast = useToast();
 
-  const login = () => { sessionStorage.setItem('ws_admin_auth','1'); setLogged(true); };
+  const login  = () => { sessionStorage.setItem('ws_admin_auth','1'); setLogged(true); };
   const logout = () => { sessionStorage.removeItem('ws_admin_auth'); setLogged(false); };
 
   if (!logged) return <LoginPage onLogin={login} />;
@@ -2148,9 +2228,12 @@ function App() {
     categories:'Categorie', settings:'Impostazioni',
   };
 
+  // Cambia pagina e chiude sidebar su mobile
+  const handleSetPage = (p) => { setPage(p); setSidebarOpen(false); };
+
   const renderPage = () => {
     switch(page) {
-      case 'dashboard':  return <Dashboard setPage={setPage}/>;
+      case 'dashboard':  return <Dashboard setPage={handleSetPage}/>;
       case 'orders':     return <OrdersPage toast={toast}/>;
       case 'products':   return <ProductsPage toast={toast}/>;
       case 'cliparts':   return <ClipartsPage toast={toast}/>;
@@ -2158,21 +2241,35 @@ function App() {
       case 'fonts':      return <FontsPage toast={toast}/>;
       case 'categories': return <CategoriesPage toast={toast}/>;
       case 'settings':   return <SettingsPage toast={toast}/>;
-      default:           return <Dashboard setPage={setPage}/>;
+      default:           return <Dashboard setPage={handleSetPage}/>;
     }
   };
 
   return (
     <div id="admin-root" style={{height:'100vh',display:'flex',flexDirection:'column'}}>
       <div style={{display:'flex',flex:1,overflow:'hidden'}}>
-        <Sidebar page={page} setPage={setPage} onLogout={logout}/>
+
+        {/* Overlay scuro mobile — click chiude sidebar */}
+        {sidebarOpen && (
+          <div className="sidebar-overlay" onClick={() => setSidebarOpen(false)} />
+        )}
+
+        <Sidebar page={page} setPage={handleSetPage} onLogout={logout} open={sidebarOpen} />
+
         <div style={{flex:1,display:'flex',flexDirection:'column',overflow:'hidden'}}>
           <div className="topbar">
-            <div className="topbar-title">{PAGE_TITLES[page]||'Admin'}</div>
+            <div style={{display:'flex',alignItems:'center',gap:10}}>
+              {/* Hamburger — visibile solo su mobile via CSS */}
+              <button className="hamburger-btn" onClick={() => setSidebarOpen(v => !v)}>
+                <i className="fa fa-bars"></i>
+              </button>
+              <div className="topbar-title">{PAGE_TITLES[page]||'Admin'}</div>
+            </div>
             <div className="topbar-right">
               <span className="topbar-badge">v2.0</span>
               <a href="index.html" target="_blank" className="view-site-btn">
-                <i className="fa fa-external-link-alt"></i> Apri Designer
+                <i className="fa fa-external-link-alt"></i>
+                <span className="btn-label"> Apri Designer</span>
               </a>
             </div>
           </div>
